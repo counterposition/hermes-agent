@@ -127,6 +127,7 @@ export interface SessionInfo {
   cwd?: string
   mcp_servers?: McpServerStatus[]
   model: string
+  reasoning_effort?: string
   release_date?: string
   skills: Record<string, string[]>
   tools: Record<string, string[]>

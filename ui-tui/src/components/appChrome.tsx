@@ -8,6 +8,7 @@ import { FACES } from '../content/faces.js'
 import { VERBS } from '../content/verbs.js'
 import { fmtDuration } from '../domain/messages.js'
 import { stickyPromptFromViewport } from '../domain/viewport.js'
+import { formatModelStatusLabel } from '../lib/status.js'
 import { buildSubagentTree, treeTotals, widthByDepth } from '../lib/subagentTree.js'
 import { fmtK } from '../lib/text.js'
 import type { Theme } from '../theme.js'
@@ -170,6 +171,7 @@ export function StatusRule({
   status,
   statusColor,
   model,
+  reasoningEffort,
   usage,
   bgCount,
   sessionStartedAt,
@@ -180,6 +182,8 @@ export function StatusRule({
 }: StatusRuleProps) {
   const pct = usage.context_percent
   const barColor = ctxBarColor(pct, t)
+  const leftWidth = Math.max(12, cols - cwdLabel.length - 3)
+  const modelLabel = formatModelStatusLabel(model, reasoningEffort, leftWidth)
 
   const ctxLabel = usage.context_max
     ? `${fmtK(usage.context_used ?? 0)}/${fmtK(usage.context_max)}`
@@ -188,7 +192,6 @@ export function StatusRule({
       : ''
 
   const bar = usage.context_max ? ctxBar(pct) : ''
-  const leftWidth = Math.max(12, cols - cwdLabel.length - 3)
 
   return (
     <Box height={1}>
@@ -200,7 +203,7 @@ export function StatusRule({
           ) : (
             <Text color={statusColor}>{status}</Text>
           )}
-          <Text color={t.color.dim}> │ {model}</Text>
+          <Text color={t.color.dim}> │ {modelLabel}</Text>
           {ctxLabel ? <Text color={t.color.dim}> │ {ctxLabel}</Text> : null}
           {bar ? (
             <Text color={t.color.dim}>
@@ -368,6 +371,7 @@ interface StatusRuleProps {
   cols: number
   cwdLabel: string
   model: string
+  reasoningEffort?: string
   sessionStartedAt?: null | number
   showCost: boolean
   status: string

@@ -10,6 +10,7 @@
 
 - **`uv sync` migration** — Replaces the legacy `uv pip` editable-install flow with proper `uv sync` project environments across installers, update logic, CI, and docs. Fresh installs use `.venv` with the curated `--extra all` flow; existing venvs are preserved via `UV_PROJECT_ENVIRONMENT`.
 - **Expanded resume display** — Adds a `resume_display: expanded` configuration option that renders the last assistant response in the standard Hermes response panel below the compact recap when resuming a session, mirroring how a fresh response is displayed.
+- **Reasoning effort in the TUI status bar** — The status bar now shows the active reasoning effort parenthetically after the model name (e.g. `claude-sonnet-4 (high)`) at medium and wide terminal widths, giving persistent visibility into the configured level.
 
 ---
 

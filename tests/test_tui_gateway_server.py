@@ -181,9 +181,19 @@ def test_setup_status_reports_provider_config(monkeypatch):
 
 
 def test_config_set_reasoning_updates_live_session_and_agent(tmp_path, monkeypatch):
+    from hermes_constants import reasoning_effort_label
+
     monkeypatch.setattr(server, "_hermes_home", tmp_path)
     agent = types.SimpleNamespace(reasoning_config=None)
     server._sessions["sid"] = _session(agent=agent)
+    emits = []
+
+    monkeypatch.setattr(
+        server,
+        "_session_info",
+        lambda live_agent: {"reasoning_effort": reasoning_effort_label(live_agent.reasoning_config)},
+    )
+    monkeypatch.setattr(server, "_emit", lambda *args: emits.append(args))
 
     resp_effort = server.handle_request(
         {
@@ -194,7 +204,9 @@ def test_config_set_reasoning_updates_live_session_and_agent(tmp_path, monkeypat
     )
     assert resp_effort["result"]["value"] == "low"
     assert agent.reasoning_config == {"enabled": True, "effort": "low"}
+    assert emits == [("session.info", "sid", {"reasoning_effort": "low"})]
 
+    emits.clear()
     resp_show = server.handle_request(
         {
             "id": "2",
@@ -204,6 +216,7 @@ def test_config_set_reasoning_updates_live_session_and_agent(tmp_path, monkeypat
     )
     assert resp_show["result"]["value"] == "show"
     assert server._sessions["sid"]["show_reasoning"] is True
+    assert emits == [("session.info", "sid", {"reasoning_effort": "low"})]
 
 
 def test_config_set_verbose_updates_session_mode_and_agent(tmp_path, monkeypatch):
@@ -1589,3 +1602,30 @@ def test_model_options_propagates_list_exception(monkeypatch):
     assert "error" in resp
     assert resp["error"]["code"] == 5033
     assert "catalog blew up" in resp["error"]["message"]
+
+
+def test_session_info_includes_reasoning_effort():
+    info = server._session_info(types.SimpleNamespace(tools=[], model="gpt-5.4", reasoning_config={"enabled": False}))
+
+    assert info["reasoning_effort"] == "none"
+
+
+def test_session_create_initial_info_includes_reasoning_effort(tmp_path, monkeypatch):
+    monkeypatch.setattr(server, "_hermes_home", tmp_path)
+    monkeypatch.setattr(server, "_cfg_cache", None)
+    monkeypatch.setattr(server, "_cfg_mtime", None)
+    (tmp_path / "config.yaml").write_text("agent:\n  reasoning_effort: high\n", encoding="utf-8")
+
+    class _NoopThread:
+        def __init__(self, target=None, daemon=None):
+            pass
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(server.threading, "Thread", _NoopThread)
+    monkeypatch.setattr(server, "_enable_gateway_prompts", lambda: None)
+
+    resp = server.handle_request({"id": "1", "method": "session.create", "params": {"cols": 80}})
+
+    assert resp["result"]["info"]["reasoning_effort"] == "high"

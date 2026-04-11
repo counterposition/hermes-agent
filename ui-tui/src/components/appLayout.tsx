@@ -275,6 +275,7 @@ const StatusRulePane = memo(function StatusRulePane({
         cols={composer.cols}
         cwdLabel={status.cwdLabel}
         model={ui.info?.model?.split('/').pop() ?? ''}
+        reasoningEffort={ui.info?.reasoning_effort}
         sessionStartedAt={status.sessionStartedAt}
         showCost={ui.showCost}
         status={ui.status}
