@@ -11,6 +11,8 @@
 
 ### What's different in this fork
 
+- **Official Obsidian skills, adopted additively** — Ships Hermes-integrated versions of the upstream Obsidian skills (`obsidian-markdown`, `obsidian-cli`, `obsidian-bases`, `json-canvas`) alongside the existing bundled `obsidian` skill. The broad `obsidian` skill remains the generic entry point and routes to the focused skills for format-specific or app-specific tasks.
+
 ---
 
 <p align="center">
