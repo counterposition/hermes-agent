@@ -1,0 +1,66 @@
+---
+title: Mixture of Agents
+description: Run a hard prompt through multiple frontier LLMs in parallel, then synthesize the responses with an aggregator.
+sidebar_label: Mixture of Agents
+sidebar_position: 16
+---
+
+# Mixture of Agents
+
+The **Mixture of Agents** (MoA) tool runs your prompt through several frontier models in parallel (the *reference* layer), then feeds the collected answers to a single aggregator model that synthesizes a final response. It is most useful for hard one-shot questions where you want to trade latency and token spend for higher answer quality.
+
+MoA is part of the `moa` toolset. It is OFF by default; enable it from the setup checklist or by adding `moa` under `enabled_toolsets` in `config.yaml`.
+
+## Configuring the roster
+
+MoA is configured entirely from `~/.hermes/config.yaml` under the `moa:` key. The module constants inside `tools/mixture_of_agents_tool.py` are fallbacks; do not edit them.
+
+```yaml
+moa:
+  enabled: true
+  reference_models:
+    - {model: anthropic/claude-opus-4.6,       provider: openrouter, reasoning: high}
+    - {model: google/gemini-3.1-pro-preview,   provider: openrouter}
+    - {model: openai/gpt-5.4-pro,              provider: openrouter, reasoning: medium}
+    - {model: x-ai/grok-4.3,                   provider: openrouter}
+  aggregator_model:
+    model: anthropic/claude-opus-4.6
+    provider: openrouter
+    reasoning: high
+  reference_temperature: 0.6
+  aggregator_temperature: 0.4
+```
+
+Every entry in `reference_models` and `aggregator_model` accepts:
+
+- `model` — the provider-native model slug.
+- `provider` — any provider accepted by the main agent's router (`openrouter`, `openai-codex`, `nous`, `anthropic`, `copilot`, `ai-gateway`, `custom`, …). Defaults to `openrouter` if omitted.
+- `reasoning` *(optional)* — one of `minimal`, `low`, `medium`, `high`, `xhigh`, `none`. Provider-specific translation matches the main agent loop: OpenRouter uses the `reasoning` extra-body gate, Copilot remaps through the model's supported effort set, Codex uses the Responses API, Anthropic emits a `thinking` block, and providers that don't support reasoning silently drop it. Omit the key (or set `null` / `""`) to send no reasoning kwarg at all.
+
+A bare string is accepted as shorthand for `{model: <string>, provider: openrouter}`.
+
+### Kill switch
+
+Set `moa.enabled: false` to disable the tool without touching `enabled_toolsets`. Preflight will refuse to run, and calls to the tool return a structured failure (`error: "MoA disabled via moa.enabled=false"`). Invalid config under a disabled block still raises at load time — errors are not deferred.
+
+### `min_successful_references`
+
+Defaults to `min(2, len(reference_models))` so a typical 3–4 model roster tolerates one reference failure. Set it explicitly to override. Values outside `[1, len(reference_models)]` fail validation.
+
+## Interaction with `/model` and `/reasoning_effort`
+
+MoA keeps its own roster — **`/model` does not cascade into MoA**. Switching the main agent's model has no effect on the reference or aggregator models used by the tool.
+
+Similarly, **`/reasoning_effort` only affects the main agent loop**. MoA entries each carry their own `reasoning` field, and the tool does not read the session-level reasoning effort. If you want MoA to track a change, update both `/reasoning_effort` *and* the relevant `reasoning:` fields under `moa:`.
+
+## Provider cost warning
+
+Routing multiple reference models through `openai-codex` multiplies consumption against the Codex plan's daily cap. The tool logs a one-time warning per Codex-routed config shape; take it seriously if you're on a metered plan.
+
+## Credentials
+
+`check_moa_requirements` is config-aware: it inspects every `provider` in your roster (including the aggregator) and checks that the corresponding credentials exist. An all-Codex roster with only `OPENAI_API_KEY` (via the Codex OAuth flow) will pass even when `OPENROUTER_API_KEY` is unset. A mixed roster needs credentials for every provider it touches.
+
+## Debug mode
+
+Set `MOA_TOOLS_DEBUG=1` in your environment to dump per-call metadata (provider, resolved model, reasoning kwargs, reference successes/failures, final response length) to the Hermes debug directory.

@@ -10,6 +10,7 @@
 
 - **Official Obsidian skills, adopted additively** — Ships Hermes-integrated versions of the upstream Obsidian skills (`obsidian-markdown`, `obsidian-cli`, `obsidian-bases`, `json-canvas`) alongside the existing bundled `obsidian` skill. The broad `obsidian` skill remains the generic entry point and routes to the focused skills for format-specific or app-specific tasks.
 - **Reasoning effort in the TUI status bar** — The status bar now shows the active reasoning effort parenthetically after the model name (e.g. `claude-sonnet-4 (high)`) at medium and wide terminal widths, giving persistent visibility into the configured level.
+- **Mixture-of-Agents provider routing** — The MoA tool is now fully configurable via `config.yaml` under the `moa:` key. Each reference and aggregator model entry accepts its own `provider` and `reasoning` effort, routed through `resolve_provider_client()` so MoA can fan out across OpenRouter, Codex, Anthropic, Copilot, Nous, custom endpoints, and any other supported provider. Includes a kill switch (`moa.enabled`), adaptive `min_successful_references`, per-provider reasoning translation with shared sticky-cache fallback for unsupported parameters, and config-aware preflight.
 
 ---
 

@@ -863,6 +863,36 @@ DEFAULT_CONFIG = {
         },
     },
 
+    "smart_model_routing": {
+        "enabled": False,
+        "max_simple_chars": 160,
+        "max_simple_words": 28,
+        "cheap_model": {},
+    },
+
+    # Mixture-of-Agents tool: per-model provider routing and reasoning effort.
+    # Absent/empty moa block inherits these defaults; omitted provider fields
+    # default to "openrouter". Routing multiple reference models through Codex
+    # multiplies consumption against the Codex plan's daily cap.
+    "moa": {
+        "enabled": True,
+        "reference_models": [
+            {"model": "anthropic/claude-opus-4.6", "provider": "openrouter"},
+            {"model": "google/gemini-3.1-pro-preview", "provider": "openrouter"},
+            {"model": "openai/gpt-5.4-pro", "provider": "openrouter"},
+            {"model": "x-ai/grok-4.3", "provider": "openrouter"},
+        ],
+        "aggregator_model": {
+            "model": "anthropic/claude-opus-4.6",
+            "provider": "openrouter",
+        },
+        "reference_temperature": 0.6,
+        "aggregator_temperature": 0.4,
+        # min_successful_references: defaults to min(2, len(reference_models))
+        # when omitted so a single silent reference failure doesn't pass.
+    },
+
+
     # Auxiliary model config — provider:model for each side task.
     # Format: provider is the provider name, model is the model slug.
     # "auto" for provider = auto-detect best available provider.
@@ -4558,6 +4588,39 @@ _COMMENTED_SECTIONS = """
 # fallback_model:
 #   provider: openrouter
 #   model: anthropic/claude-sonnet-4
+#
+# ── Smart Model Routing ────────────────────────────────────────────────
+# Optional cheap-vs-strong routing for simple turns.
+# Keeps the primary model for complex work, but can route short/simple
+# messages to a cheaper model across providers.
+#
+# smart_model_routing:
+#   enabled: true
+#   max_simple_chars: 160
+#   max_simple_words: 28
+#   cheap_model:
+#     provider: openrouter
+#     model: google/gemini-2.5-flash
+
+# ── Mixture of Agents ────────────────────────────────────────────────
+# Per-model roster for the MoA tool.  Each entry accepts `model`,
+# `provider`, and optional `reasoning` ({minimal,low,medium,high,xhigh,none}).
+# Warning: routing multiple reference models through `openai-codex`
+# multiplies consumption against the Codex plan's daily cap.
+#
+# moa:
+#   enabled: true
+#   reference_models:
+#     - {model: anthropic/claude-opus-4.6,   provider: openrouter, reasoning: high}
+#     - {model: google/gemini-3.1-pro-preview, provider: openrouter}
+#     - {model: openai/gpt-5.4-pro,          provider: openrouter, reasoning: medium}
+#     - {model: x-ai/grok-4.3,               provider: openrouter}
+#   aggregator_model:
+#     model: anthropic/claude-opus-4.6
+#     provider: openrouter
+#     reasoning: high
+#   reference_temperature: 0.6
+#   aggregator_temperature: 0.4
 """
 
 

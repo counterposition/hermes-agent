@@ -672,39 +672,33 @@ class _CodexCompletionsAdapter:
         # Note: the Codex endpoint (chatgpt.com/backend-api/codex) does NOT
         # support max_output_tokens or temperature — omit to avoid 400 errors.
 
-        # Translate extra_body.reasoning (chat.completions shape) into the
-        # Responses API's top-level reasoning + include fields.  Mirrors
-        # agent/transports/codex.py::build_kwargs() so auxiliary callers
-        # that configure reasoning via auxiliary.<task>.extra_body get the
-        # same behavior as the main agent's Codex transport.
-        extra_body = kwargs.get("extra_body") or {}
-        if isinstance(extra_body, dict):
-            reasoning_cfg = extra_body.get("reasoning")
-            if isinstance(reasoning_cfg, dict):
-                if reasoning_cfg.get("enabled") is False:
-                    # Reasoning explicitly disabled — do not set reasoning
-                    # or include.  The Codex backend still thinks by
-                    # default, but we honor the caller's intent where the
-                    # API allows it.
-                    pass
-                else:
-                    # Truthy-only check mirrors agent/transports/codex.py
-                    # build_kwargs(): falsy values (None, "", 0) fall back
-                    # to the default rather than being forwarded to the
-                    # Codex backend, which rejects e.g. {"effort": null}
-                    # with a 400.
-                    effort = reasoning_cfg.get("effort") or "medium"
-                    # Codex backend rejects "minimal"; clamp to "low" to
-                    # match the main-agent Codex transport behavior.
-                    if effort == "minimal":
-                        effort = "low"
-                    resp_kwargs["reasoning"] = {
-                        "effort": effort,
-                        "summary": "auto",
-                    }
-                    resp_kwargs["include"] = ["reasoning.encrypted_content"]
+        reasoning_cfg = kwargs.get("reasoning_config")
+        if not isinstance(reasoning_cfg, dict):
+            # Translate extra_body.reasoning (chat.completions shape) into the
+            # Responses API's top-level reasoning + include fields.  Mirrors
+            # agent/transports/codex.py::build_kwargs() so auxiliary callers
+            # that configure reasoning via auxiliary.<task>.extra_body get the
+            # same behavior as the main agent's Codex transport.
+            extra_body = kwargs.get("extra_body") or {}
+            if isinstance(extra_body, dict):
+                reasoning_cfg = extra_body.get("reasoning")
 
-        # Tools support for auxiliary callers (e.g. skills_hub) that pass function schemas
+        if isinstance(reasoning_cfg, dict):
+            if reasoning_cfg.get("enabled") is False:
+                # Reasoning explicitly disabled — do not set reasoning or
+                # include. The Codex backend still thinks by default, but we
+                # honor the caller's intent where the API allows it.
+                pass
+            else:
+                effort = str(reasoning_cfg.get("effort") or "medium").strip().lower()
+                # Codex backend rejects "minimal"; clamp to "low" to match
+                # the main-agent Codex transport behavior.
+                if effort == "minimal":
+                    effort = "low"
+                resp_kwargs["reasoning"] = {"effort": effort, "summary": "auto"}
+                resp_kwargs["include"] = ["reasoning.encrypted_content"]
+
+        # Tools support for auxiliary callers that pass function schemas
         tools = kwargs.get("tools")
         if tools:
             # xAI's Responses endpoint rejects ``pattern`` and ``format`` JSON Schema
@@ -962,6 +956,55 @@ class AsyncCodexAuxiliaryClient:
         self._real_client = sync_wrapper._real_client
 
 
+class _AsyncCopilotACPCompletionsAdapter:
+    """Async bridge for the sync Copilot ACP client.
+
+    The ACP adapter is subprocess-backed and only exposes a synchronous
+    ``chat.completions.create()``. Async consumers must not await it
+    directly, and concurrent calls must be serialized because the sync
+    client tracks one active subprocess at a time.
+    """
+
+    def __init__(self, sync_adapter: Any):
+        self._sync = sync_adapter
+        self._call_lock = threading.Lock()
+
+    async def create(self, **kwargs) -> Any:
+        import asyncio
+
+        def _run():
+            with self._call_lock:
+                return self._sync.create(**kwargs)
+
+        return await asyncio.to_thread(_run)
+
+
+class _AsyncCopilotACPChatShim:
+    def __init__(self, adapter: _AsyncCopilotACPCompletionsAdapter):
+        self.completions = adapter
+
+
+class AsyncCopilotACPAuxiliaryClient:
+    """Async-compatible wrapper for Copilot ACP."""
+
+    def __init__(self, sync_wrapper: Any):
+        sync_adapter = sync_wrapper.chat.completions
+        async_adapter = _AsyncCopilotACPCompletionsAdapter(sync_adapter)
+        self.chat = _AsyncCopilotACPChatShim(async_adapter)
+        self.api_key = sync_wrapper.api_key
+        self.base_url = sync_wrapper.base_url
+        self._sync_wrapper = sync_wrapper
+
+    @property
+    def is_closed(self) -> bool:
+        return bool(getattr(self._sync_wrapper, "is_closed", False))
+
+    def close(self) -> None:
+        close_fn = getattr(self._sync_wrapper, "close", None)
+        if callable(close_fn):
+            close_fn()
+
+
 class _AnthropicCompletionsAdapter:
     """OpenAI-client-compatible adapter for Anthropic Messages API."""
 
@@ -1003,14 +1046,16 @@ class _AnthropicCompletionsAdapter:
             messages=messages,
             tools=tools,
             max_tokens=max_tokens,
-            reasoning_config=None,
+            reasoning_config=kwargs.get("reasoning_config"),
             tool_choice=normalized_tool_choice,
             is_oauth=self._is_oauth,
         )
         # Opus 4.7+ rejects any non-default temperature/top_p/top_k; only set
         # temperature for models that still accept it. build_anthropic_kwargs
         # additionally strips these keys as a safety net — keep both layers.
-        if temperature is not None:
+        # Also skip if build_anthropic_kwargs already set temperature (e.g. to 1
+        # when thinking is enabled on older models) so we don't clobber it.
+        if temperature is not None and "temperature" not in anthropic_kwargs:
             from agent.anthropic_adapter import _forbids_sampling_params
             if not _forbids_sampling_params(model):
                 anthropic_kwargs["temperature"] = temperature
@@ -2235,6 +2280,37 @@ def _reset_aux_unhealthy_cache() -> None:
     _aux_unhealthy_logged_at.clear()
 
 
+def provider_supports_aux_routing(provider: str) -> bool:
+    """Return True when ``resolve_provider_client()`` can route this provider.
+
+    This is stricter than the full provider catalog used by setup/model-picker
+    surfaces: some registered providers still require a different runtime path
+    (for example ``bedrock`` or OAuth-only CLIs that are not wired into the
+    auxiliary router yet).
+    """
+    normalized = _normalize_aux_provider(provider)
+    if normalized in {"auto", "openrouter", "custom"}:
+        return True
+    if normalized.startswith("custom:"):
+        return True
+
+    try:
+        from hermes_cli.auth import PROVIDER_REGISTRY
+    except ImportError:
+        return False
+
+    pconfig = PROVIDER_REGISTRY.get(normalized)
+    if pconfig is None:
+        return False
+    if pconfig.auth_type == "api_key":
+        return True
+    if pconfig.auth_type == "external_process":
+        return normalized == "copilot-acp"
+    if pconfig.auth_type in {"oauth_device_code", "oauth_external"}:
+        return normalized in {"nous", "openai-codex"}
+    return False
+
+
 def _is_payment_error(exc: Exception) -> bool:
     """Detect payment/credit/quota exhaustion errors.
 
@@ -3015,7 +3091,7 @@ def _to_async_client(sync_client, model: str, is_vision: bool = False):
     try:
         from agent.copilot_acp_client import CopilotACPClient
         if isinstance(sync_client, CopilotACPClient):
-            return sync_client, model
+            return AsyncCopilotACPAuxiliaryClient(sync_client), model
     except ImportError:
         pass
 

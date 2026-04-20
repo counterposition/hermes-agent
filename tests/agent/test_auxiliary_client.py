@@ -3026,3 +3026,31 @@ class TestAuxUnhealthyCache:
             )
             # After the 402, OpenRouter is in the unhealthy cache.
             assert _is_provider_unhealthy("openrouter") is True
+
+
+@pytest.mark.asyncio
+async def test_resolve_provider_client_copilot_acp_async_mode_wraps_sync_client():
+    from agent.copilot_acp_client import CopilotACPClient
+
+    fake_response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))]
+    )
+
+    with patch("agent.auxiliary_client._read_main_model", return_value="gpt-5.4"), \
+         patch.object(CopilotACPClient, "_create_chat_completion", return_value=fake_response) as mock_create, \
+         patch("hermes_cli.auth.resolve_external_process_provider_credentials", return_value={
+             "provider": "copilot-acp",
+             "api_key": "copilot-acp",
+             "base_url": "acp://copilot",
+             "command": "/usr/bin/copilot",
+             "args": ["--acp", "--stdio"],
+         }):
+        client, model = resolve_provider_client("copilot-acp", async_mode=True)
+        response = await client.chat.completions.create(
+            model="gpt-5.4",
+            messages=[{"role": "user", "content": "hello"}],
+        )
+
+    assert model == "gpt-5.4"
+    assert response is fake_response
+    mock_create.assert_called_once()
