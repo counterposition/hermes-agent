@@ -1063,6 +1063,17 @@ class TestBuildApiKwargs:
 
         assert kwargs["reasoning_effort"] == "high"
 
+    def test_kimi_coding_endpoint_clamps_max_effort_to_high(self, agent):
+        agent.base_url = "https://api.kimi.com/coding/v1"
+        agent._base_url_lower = agent.base_url.lower()
+        agent.model = "kimi-for-coding"
+        agent.reasoning_config = {"enabled": True, "effort": "max"}
+        messages = [{"role": "user", "content": "hi"}]
+
+        kwargs = agent._build_api_kwargs(messages)
+
+        assert kwargs["reasoning_effort"] == "high"
+
     def test_kimi_coding_endpoint_sends_thinking_extra_body(self, agent):
         """Kimi endpoint should send extra_body.thinking={"type":"enabled"}
         to activate reasoning mode, mirroring Kimi CLI's with_thinking()."""
@@ -1173,6 +1184,14 @@ class TestBuildApiKwargs:
         agent.base_url = "https://api.githubcopilot.com"
         agent.model = "gpt-5.4"
         agent.reasoning_config = {"enabled": True, "effort": "xhigh"}
+        messages = [{"role": "user", "content": "hi"}]
+        kwargs = agent._build_api_kwargs(messages)
+        assert kwargs["extra_body"]["reasoning"] == {"effort": "high"}
+
+    def test_reasoning_max_normalized_for_copilot(self, agent):
+        agent.base_url = "https://api.githubcopilot.com"
+        agent.model = "gpt-5.4"
+        agent.reasoning_config = {"enabled": True, "effort": "max"}
         messages = [{"role": "user", "content": "hi"}]
         kwargs = agent._build_api_kwargs(messages)
         assert kwargs["extra_body"]["reasoning"] == {"effort": "high"}

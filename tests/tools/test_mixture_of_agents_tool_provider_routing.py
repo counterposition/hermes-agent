@@ -337,6 +337,12 @@ def test_check_moa_requirements_reports_missing_provider(fake_catalogs, monkeypa
         ),
         (
             "openrouter",
+            "anthropic/claude-opus-4.7",
+            {"enabled": True, "effort": "max"},
+            {"extra_body": {"reasoning": {"enabled": True, "effort": "xhigh"}}},
+        ),
+        (
+            "openrouter",
             "qwen/qwen3.5-plus-02-15",
             {"enabled": False},
             {"extra_body": {"reasoning": {"enabled": False}}},
@@ -352,6 +358,12 @@ def test_check_moa_requirements_reports_missing_provider(fake_catalogs, monkeypa
             "copilot",
             "gpt-5.4",
             {"enabled": True, "effort": "xhigh"},
+            {"extra_body": {"reasoning": {"effort": "high"}}},
+        ),
+        (
+            "copilot",
+            "gpt-5.4",
+            {"enabled": True, "effort": "max"},
             {"extra_body": {"reasoning": {"effort": "high"}}},
         ),
         ("copilot", "gpt-5.4", {"enabled": False}, {}),
@@ -481,6 +493,13 @@ def _agent_reasoning_view(agent, provider: str) -> dict:
         (
             "openrouter",
             "https://openrouter.ai/api/v1",
+            "anthropic/claude-opus-4.7",
+            {"enabled": True, "effort": "max"},
+            [],
+        ),
+        (
+            "openrouter",
+            "https://openrouter.ai/api/v1",
             "minimax/minimax-m2.5",
             {"enabled": True, "effort": "high"},
             [],
@@ -497,6 +516,13 @@ def _agent_reasoning_view(agent, provider: str) -> dict:
             "https://api.githubcopilot.com",
             "gpt-5.4",
             {"enabled": True, "effort": "xhigh"},
+            ["low", "medium", "high"],
+        ),
+        (
+            "copilot",
+            "https://api.githubcopilot.com",
+            "gpt-5.4",
+            {"enabled": True, "effort": "max"},
             ["low", "medium", "high"],
         ),
         (
@@ -869,6 +895,47 @@ def test_codex_adapter_receives_reasoning_config_from_moa_shape():
 
     assert captured["reasoning"] == {"effort": "high", "summary": "auto"}
     assert captured["include"] == ["reasoning.encrypted_content"]
+
+
+def test_codex_adapter_clamps_max_effort_from_moa_shape():
+    """MoA can now parse `max`, but Codex still tops out at xhigh."""
+    from agent.auxiliary_client import _CodexCompletionsAdapter
+
+    moa_kwargs = moa._reasoning_kwargs(
+        "openai-codex", "gpt-5.4", {"enabled": True, "effort": "max"}
+    )
+    assert moa_kwargs == {"reasoning_config": {"enabled": True, "effort": "max"}}
+
+    captured: dict = {}
+
+    class FakeStream:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def __iter__(self):
+            return iter(())
+
+        def get_final_response(self):
+            return SimpleNamespace(output=[], usage=None, model="gpt-5.4")
+
+    fake_client = SimpleNamespace(
+        responses=SimpleNamespace(stream=lambda **kwargs: FakeStream(**kwargs))
+    )
+
+    adapter = _CodexCompletionsAdapter(fake_client, "gpt-5.4")
+    adapter.create(
+        model="gpt-5.4",
+        messages=[{"role": "user", "content": "hi"}],
+        **moa_kwargs,
+    )
+
+    assert captured["reasoning"] == {"effort": "xhigh", "summary": "auto"}
 
 
 def test_anthropic_adapter_receives_reasoning_config_from_moa_shape(monkeypatch):

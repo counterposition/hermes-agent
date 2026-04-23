@@ -102,6 +102,17 @@ class TestChatCompletionsBuildKwargs:
         # Nous rejects enabled=false; reasoning omitted entirely
         assert "reasoning" not in kw.get("extra_body", {})
 
+    def test_reasoning_max_clamped_to_xhigh_for_extra_body(self, transport):
+        msgs = [{"role": "user", "content": "Hi"}]
+        kw = transport.build_kwargs(
+            model="anthropic/claude-opus-4.7",
+            messages=msgs,
+            supports_reasoning=True,
+            is_openrouter=True,
+            reasoning_config={"enabled": True, "effort": "max"},
+        )
+        assert kw["extra_body"]["reasoning"] == {"enabled": True, "effort": "xhigh"}
+
     def test_ollama_num_ctx(self, transport):
         msgs = [{"role": "user", "content": "Hi"}]
         kw = transport.build_kwargs(
@@ -209,6 +220,24 @@ class TestChatCompletionsKimi:
             max_tokens_param_fn=lambda n: {"max_tokens": n},
         )
         # Kimi requires reasoning_effort as a top-level parameter
+        assert kw["reasoning_effort"] == "high"
+
+    def test_kimi_reasoning_effort_clamps_max_to_high(self, transport):
+        kw = transport.build_kwargs(
+            model="kimi-k2", messages=[{"role": "user", "content": "Hi"}],
+            is_kimi=True,
+            reasoning_config={"effort": "max"},
+            max_tokens_param_fn=lambda n: {"max_tokens": n},
+        )
+        assert kw["reasoning_effort"] == "high"
+
+    def test_kimi_reasoning_effort_clamps_xhigh_to_high(self, transport):
+        kw = transport.build_kwargs(
+            model="kimi-k2", messages=[{"role": "user", "content": "Hi"}],
+            is_kimi=True,
+            reasoning_config={"effort": "xhigh"},
+            max_tokens_param_fn=lambda n: {"max_tokens": n},
+        )
         assert kw["reasoning_effort"] == "high"
 
     def test_kimi_reasoning_effort_omitted_when_thinking_disabled(self, transport):

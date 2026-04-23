@@ -387,7 +387,7 @@ class _CodexCompletionsAdapter:
         if isinstance(reasoning_cfg, dict) and reasoning_cfg.get("enabled") is True:
             effort = reasoning_cfg.get("effort")
             if effort:
-                _effort_clamp = {"minimal": "low"}
+                _effort_clamp = {"minimal": "low", "max": "xhigh"}
                 effort = _effort_clamp.get(effort, effort)
                 resp_kwargs["reasoning"] = {"effort": effort, "summary": "auto"}
                 resp_kwargs["include"] = ["reasoning.encrypted_content"]

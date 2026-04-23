@@ -88,7 +88,9 @@ def _copilot_remap_effort(requested_effort: str, supported_efforts: List[str]) -
 
     See run_agent.py:6422-6430.
     """
-    if requested_effort == "xhigh" and "high" in supported_efforts:
+    if requested_effort == "max":
+        requested_effort = "xhigh"
+    if requested_effort == "xhigh" and "xhigh" not in supported_efforts and "high" in supported_efforts:
         return "high"
     if requested_effort not in supported_efforts:
         if requested_effort == "minimal" and "low" in supported_efforts:
@@ -97,6 +99,16 @@ def _copilot_remap_effort(requested_effort: str, supported_efforts: List[str]) -
             return "medium"
         return supported_efforts[0]
     return requested_effort
+
+
+def _normalize_openai_reasoning_effort(effort: Optional[str]) -> Optional[str]:
+    """Map Anthropic-only ``max`` to the strongest OpenAI-style effort."""
+    normalized = str(effort or "").strip().lower()
+    if not normalized:
+        return None
+    if normalized == "max":
+        return "xhigh"
+    return normalized
 
 
 def _reasoning_kwargs(
@@ -122,14 +134,16 @@ def _reasoning_kwargs(
 
     if provider in {"nous", "ai-gateway"}:
         if enabled:
-            return {"extra_body": {"reasoning": {"enabled": True, "effort": effort}}}
+            normalized_effort = _normalize_openai_reasoning_effort(effort)
+            return {"extra_body": {"reasoning": {"enabled": True, "effort": normalized_effort}}}
         return {"extra_body": {"reasoning": {"enabled": False}}}
 
     if provider == "openrouter":
         if not _openrouter_family_supports_reasoning(resolved_model):
             return {}
         if enabled:
-            return {"extra_body": {"reasoning": {"enabled": True, "effort": effort}}}
+            normalized_effort = _normalize_openai_reasoning_effort(effort)
+            return {"extra_body": {"reasoning": {"enabled": True, "effort": normalized_effort}}}
         return {"extra_body": {"reasoning": {"enabled": False}}}
 
     if provider in {"copilot", "copilot-acp"}:

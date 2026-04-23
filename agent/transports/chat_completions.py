@@ -208,6 +208,10 @@ class ChatCompletionsTransport(ProviderTransport):
                 _kimi_effort = "medium"
                 if reasoning_config and isinstance(reasoning_config, dict):
                     _e = (reasoning_config.get("effort") or "").strip().lower()
+                    # Kimi exposes low/medium/high only; map stronger global
+                    # tiers to its highest supported setting.
+                    if _e in ("xhigh", "max"):
+                        _e = "high"
                     if _e in ("low", "medium", "high"):
                         _kimi_effort = _e
                 api_kwargs["reasoning_effort"] = _kimi_effort
@@ -242,6 +246,12 @@ class ChatCompletionsTransport(ProviderTransport):
             else:
                 if reasoning_config is not None:
                     rc = dict(reasoning_config)
+                    if rc.get("enabled") is not False:
+                        effort = str(rc.get("effort") or "").strip().lower()
+                        if effort == "max":
+                            # OpenAI-style reasoning routes top out at xhigh;
+                            # reserve literal "max" for Anthropic's native transport.
+                            rc["effort"] = "xhigh"
                     if is_nous and rc.get("enabled") is False:
                         pass  # omit for Nous when disabled
                     else:

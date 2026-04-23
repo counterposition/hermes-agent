@@ -35,7 +35,7 @@ Every entry in `reference_models` and `aggregator_model` accepts:
 
 - `model` — the provider-native model slug.
 - `provider` — any provider accepted by the main agent's router (`openrouter`, `openai-codex`, `nous`, `anthropic`, `copilot`, `ai-gateway`, `custom`, …). Defaults to `openrouter` if omitted.
-- `reasoning` *(optional)* — one of `minimal`, `low`, `medium`, `high`, `xhigh`, `none`. Provider-specific translation matches the main agent loop: OpenRouter uses the `reasoning` extra-body gate, Copilot remaps through the model's supported effort set, Codex uses the Responses API, Anthropic emits a `thinking` block, and providers that don't support reasoning silently drop it. Omit the key (or set `null` / `""`) to send no reasoning kwarg at all.
+- `reasoning` *(optional)* — one of `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, `none`. Provider-specific translation matches the main agent loop: OpenRouter uses the `reasoning` extra-body gate, Copilot remaps through the model's supported effort set, Codex uses the Responses API, Anthropic emits a `thinking` block, and providers that don't support reasoning silently drop it. Omit the key (or set `null` / `""`) to send no reasoning kwarg at all.
 
 A bare string is accepted as shorthand for `{model: <string>, provider: openrouter}`.
 

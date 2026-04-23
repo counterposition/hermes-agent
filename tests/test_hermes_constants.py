@@ -7,7 +7,12 @@ from unittest.mock import patch
 import pytest
 
 import hermes_constants
-from hermes_constants import get_default_hermes_root, is_container, reasoning_effort_label
+from hermes_constants import (
+    get_default_hermes_root,
+    is_container,
+    parse_reasoning_effort,
+    reasoning_effort_label,
+)
 
 
 class TestGetDefaultHermesRoot:
@@ -120,8 +125,13 @@ class TestIsContainer:
         ({}, "medium"),
         ({"enabled": False}, "none"),
         ({"enabled": True, "effort": "high"}, "high"),
+        ({"enabled": True, "effort": "max"}, "max"),
         ({"enabled": True, "effort": "bogus"}, "medium"),
     ],
 )
 def test_reasoning_effort_label(reasoning_config, expected):
     assert reasoning_effort_label(reasoning_config) == expected
+
+
+def test_parse_reasoning_effort_accepts_max():
+    assert parse_reasoning_effort("max") == {"enabled": True, "effort": "max"}

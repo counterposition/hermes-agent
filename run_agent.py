@@ -7100,7 +7100,10 @@ class AIAgent:
         else:
             requested_effort = "medium"
 
-        if requested_effort == "xhigh" and "high" in supported_efforts:
+        if requested_effort == "max":
+            requested_effort = "xhigh"
+
+        if requested_effort == "xhigh" and "xhigh" not in supported_efforts and "high" in supported_efforts:
             requested_effort = "high"
         elif requested_effort not in supported_efforts:
             if requested_effort == "minimal" and "low" in supported_efforts:

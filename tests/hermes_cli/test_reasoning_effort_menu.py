@@ -21,14 +21,16 @@ def test_reasoning_menu_orders_minimal_before_low(monkeypatch):
     monkeypatch.setitem(sys.modules, "simple_term_menu", fake_module)
 
     selected = _prompt_reasoning_effort_selection(
-        ["low", "minimal", "medium", "high"],
+        ["low", "minimal", "medium", "high", "max", "xhigh"],
         current_effort="medium",
     )
 
     assert selected == "medium"
-    assert _FakeTerminalMenu.last_choices[:4] == [
+    assert _FakeTerminalMenu.last_choices[:6] == [
         "  minimal",
         "  low",
         "  medium  ← currently in use",
         "  high",
+        "  xhigh",
+        "  max",
     ]

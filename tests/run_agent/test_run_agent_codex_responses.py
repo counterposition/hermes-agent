@@ -22,6 +22,8 @@ def _no_codex_backoff(monkeypatch):
 
 
 def _patch_agent_bootstrap(monkeypatch):
+    import agent.transports.codex  # noqa: F401
+
     monkeypatch.setattr(
         run_agent,
         "get_tool_definitions",
@@ -345,6 +347,35 @@ def test_build_api_kwargs_codex_clamps_minimal_effort(monkeypatch):
     )
 
     assert kwargs["reasoning"]["effort"] == "low"
+
+
+def test_build_api_kwargs_codex_clamps_max_effort(monkeypatch):
+    """'max' is Anthropic-only; Codex should receive the strongest supported OpenAI level."""
+    _patch_agent_bootstrap(monkeypatch)
+
+    agent = run_agent.AIAgent(
+        model="gpt-5-codex",
+        base_url="https://chatgpt.com/backend-api/codex",
+        api_key="codex-token",
+        quiet_mode=True,
+        max_iterations=4,
+        skip_context_files=True,
+        skip_memory=True,
+        reasoning_config={"enabled": True, "effort": "max"},
+    )
+    agent._cleanup_task_resources = lambda task_id: None
+    agent._persist_session = lambda messages, history=None: None
+    agent._save_trajectory = lambda messages, user_message, completed: None
+    agent._save_session_log = lambda messages: None
+
+    kwargs = agent._build_api_kwargs(
+        [
+            {"role": "system", "content": "You are Hermes."},
+            {"role": "user", "content": "Ping"},
+        ]
+    )
+
+    assert kwargs["reasoning"]["effort"] == "xhigh"
 
 
 def test_build_api_kwargs_codex_preserves_supported_efforts(monkeypatch):
