@@ -35,17 +35,22 @@ class CopilotProfile(ProviderProfile):
                 supported_efforts = github_model_reasoning_efforts(model)
                 if supported_efforts and reasoning_config:
                     if reasoning_config.get("enabled") is False:
-                        return {}, {}
+                        return extra_body, {}
+
                     effort = str(reasoning_config.get("effort", "medium") or "medium").strip().lower()
                     # Normalize non-standard effort levels to the nearest supported.
-                    if effort in ("xhigh", "max"):
+                    if effort == "max":
+                        effort = "xhigh"
+                    if effort == "xhigh" and "xhigh" not in supported_efforts and "high" in supported_efforts:
                         effort = "high"
-                    elif effort == "minimal" and "low" in supported_efforts:
-                        effort = "low"
                     elif effort not in supported_efforts:
-                        effort = "medium" if "medium" in supported_efforts else supported_efforts[0]
-                    if effort in supported_efforts:
-                        extra_body["reasoning"] = {"effort": effort}
+                        if effort == "minimal" and "low" in supported_efforts:
+                            effort = "low"
+                        elif "medium" in supported_efforts:
+                            effort = "medium"
+                        else:
+                            effort = supported_efforts[0]
+                    extra_body["reasoning"] = {"effort": effort}
                 elif supported_efforts:
                     extra_body["reasoning"] = {"effort": "medium"}
             except Exception:

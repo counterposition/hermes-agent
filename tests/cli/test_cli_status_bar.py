@@ -324,6 +324,8 @@ class TestCLIStatusBar:
         assert cli_obj._compression_count_style(25) == "class:status-bar-bad"
 
     def test_compression_count_in_wide_fragments(self):
+        from unittest.mock import MagicMock, patch
+
         cli_obj = _attach_agent(
             _make_cli(),
             prompt_tokens=10_230,
@@ -336,7 +338,10 @@ class TestCLIStatusBar:
         )
         cli_obj._status_bar_visible = True
 
-        frags = cli_obj._get_status_bar_fragments()
+        mock_app = MagicMock()
+        mock_app.output.get_size.return_value = MagicMock(columns=120)
+        with patch("prompt_toolkit.application.get_app", return_value=mock_app):
+            frags = cli_obj._get_status_bar_fragments()
         frag_texts = [text for _, text in frags]
 
         assert "🗜️ 7" in frag_texts

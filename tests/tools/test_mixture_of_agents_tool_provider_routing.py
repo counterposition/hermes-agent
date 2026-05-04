@@ -463,7 +463,10 @@ def agent_for_parity():
         patch("agent.auxiliary_client.OpenAI"),
     ):
         agent = AIAgent(
+            base_url="https://openrouter.ai/api/v1",
             api_key="test-key-1234567890",
+            provider="openrouter",
+            model="qwen/qwen3.5-plus-02-15",
             quiet_mode=True,
             skip_context_files=True,
             skip_memory=True,
@@ -833,17 +836,17 @@ def test_anthropic_adapter_does_not_clobber_thinking_temperature(monkeypatch):
             "thinking": {"type": "enabled", "budget_tokens": 1024},
         }
 
-    class FakeTransport:
-        def normalize_response(self, _response, strip_tool_prefix=False):
-            return SimpleNamespace(
-                content="",
-                tool_calls=None,
-                reasoning=None,
-                finish_reason="stop",
-            )
+    fake_transport = SimpleNamespace(
+        normalize_response=lambda _response, **_kwargs: SimpleNamespace(
+            content="",
+            tool_calls=[],
+            reasoning=None,
+            finish_reason="stop",
+        )
+    )
 
     monkeypatch.setattr("agent.anthropic_adapter.build_anthropic_kwargs", fake_build_kwargs)
-    monkeypatch.setattr("agent.transports.get_transport", lambda _name: FakeTransport())
+    monkeypatch.setattr("agent.transports.get_transport", lambda _mode: fake_transport)
 
     adapter = aux._AnthropicCompletionsAdapter(fake_client, "claude-opus-4-6")
     adapter.create(
@@ -969,6 +972,15 @@ def test_anthropic_adapter_receives_reasoning_config_from_moa_shape(monkeypatch)
             "max_tokens": kwargs["max_tokens"],
         }
 
+    fake_transport = SimpleNamespace(
+        normalize_response=lambda _response, **_kwargs: SimpleNamespace(
+            content="",
+            tool_calls=[],
+            reasoning=None,
+            finish_reason="stop",
+        )
+    )
+
     fake_client = SimpleNamespace(
         messages=SimpleNamespace(create=lambda **kw: SimpleNamespace(
             content=[],
@@ -977,17 +989,8 @@ def test_anthropic_adapter_receives_reasoning_config_from_moa_shape(monkeypatch)
         ))
     )
 
-    class FakeTransport:
-        def normalize_response(self, _response, strip_tool_prefix=False):
-            return SimpleNamespace(
-                content="",
-                tool_calls=None,
-                reasoning=None,
-                finish_reason="stop",
-            )
-
     monkeypatch.setattr("agent.anthropic_adapter.build_anthropic_kwargs", fake_build_kwargs)
-    monkeypatch.setattr("agent.transports.get_transport", lambda _name: FakeTransport())
+    monkeypatch.setattr("agent.transports.get_transport", lambda _mode: fake_transport)
 
     adapter = aux._AnthropicCompletionsAdapter(fake_client, "claude-opus-4-6")
     adapter.create(
