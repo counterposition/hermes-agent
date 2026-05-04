@@ -75,7 +75,12 @@ After difficult/iterative tasks, offer to save as a skill. If a skill you loaded
     - email-inbox-triage: Triage an inbox: prioritize threads, draft replies safely.
     - himalaya: Himalaya CLI: IMAP/SMTP email from terminal.
   - youtube-content: YouTube transcripts to summaries, threads, blogs.
-  - obsidian: Read, search, create, and edit notes in the Obsidian vault.
+  note-taking:
+    - json-canvas: Create and edit .canvas files with nodes and edges.
+    - obsidian: Read, search, create, and edit notes in the Obsidian vault.
+    - obsidian-bases: Create and edit .base database views, filters, and formulas.
+    - obsidian-cli: Drive the live Obsidian app from the command line.
+    - obsidian-markdown: Write Obsidian notes with wikilinks, embeds, and callouts.
   productivity:
     - document-to-action-items: Extract cited obligations, deadlines, tasks from documents.
     - google-workspace: Gmail, Calendar, Drive, Docs, Sheets via gws CLI or Python.
