@@ -1759,6 +1759,83 @@ class TestExecuteToolCalls:
         assert "API call failed" not in output
         assert "Rate limit reached" not in output
 
+    def test_non_retryable_client_error_returns_structured_failure_envelope(self, agent):
+        class _BadRequest(Exception):
+            status_code = 400
+            body = {"error": {"message": "gemini-3.1-pro is not a valid model ID"}}
+
+            def __str__(self):
+                return "Error code: 400 - gemini-3.1-pro is not a valid model ID"
+
+        agent.provider = "openrouter"
+        agent.model = "gemini-3.1-pro"
+        agent.base_url = "https://openrouter.ai/api/v1"
+        agent.fallback_providers = []
+        agent.suppress_status_output = True
+        agent._interruptible_api_call = lambda _kwargs: (_ for _ in ()).throw(_BadRequest())
+        agent._persist_session = lambda *args, **kwargs: None
+        agent._save_trajectory = lambda *args, **kwargs: None
+        agent._save_session_log = lambda *args, **kwargs: None
+
+        result = agent.run_conversation("hello")
+
+        assert result["final_response"] is None
+        assert result["failed"] is True
+        assert result["completed"] is False
+        assert result["status_code"] == 400
+        assert result["provider"] == "openrouter"
+        assert result["model"] == "gemini-3.1-pro"
+        assert result["base_url"] == "https://openrouter.ai/api/v1"
+        assert result["error_kind"] == "non_retryable_client_error"
+        assert "gemini-3.1-pro" in result["error_summary"]
+        assert "Model request failed" in result["display_error"]
+        assert not any(
+            m.get("role") == "assistant"
+            and "Model request failed" in str(m.get("content", ""))
+            for m in result["messages"]
+        )
+
+    def test_failure_envelope_redacts_sensitive_error_text(self, agent):
+        fake_bearer = "bearer-" + "value"
+        fake_query = "query-" + "value"
+
+        class _BadRequest(Exception):
+            status_code = 400
+            body = {
+                "error": {
+                    "message": (
+                        f"invalid request Authorization: Bearer {fake_bearer} "
+                        f"https://example.com/callback?access_token={fake_query}"
+                    )
+                }
+            }
+
+            def __str__(self):
+                return (
+                    f"Error code: 400 Authorization: Bearer {fake_bearer} "
+                    f"https://example.com/callback?access_token={fake_query}"
+                )
+
+        agent.provider = "openrouter"
+        agent.model = "bad/model"
+        agent.base_url = f"https://openrouter.ai/api/v1?access_token={fake_query}"
+        agent.fallback_providers = []
+        agent.suppress_status_output = True
+        agent._interruptible_api_call = lambda _kwargs: (_ for _ in ()).throw(_BadRequest())
+        agent._persist_session = lambda *args, **kwargs: None
+        agent._save_trajectory = lambda *args, **kwargs: None
+        agent._save_session_log = lambda *args, **kwargs: None
+
+        result = agent.run_conversation("hello")
+
+        combined = "\n".join(
+            [result["error"], result["error_summary"], result["display_error"], result["base_url"]]
+        )
+        assert fake_bearer not in combined
+        assert fake_query not in combined
+        assert f"access_token={fake_query}" not in combined
+        assert "Bearer" in combined
+
 
 class TestConcurrentToolExecution:
     """Tests for _execute_tool_calls_concurrent and dispatch logic."""
@@ -3143,10 +3220,13 @@ class TestRunConversation:
         assert result["api_calls"] == 1
         assert "reasoning" in result["error"].lower()
         assert "output tokens" in result["error"].lower()
-        # Should have a user-friendly response (not None)
-        assert result["final_response"] is not None
-        assert "Thinking Budget Exhausted" in result["final_response"]
-        assert "/thinkon" in result["final_response"]
+        # Runtime failure remains separate from assistant-authored final_response,
+        # but carries presentation-safe display text for CLI/TUI surfaces.
+        assert result["final_response"] is None
+        assert result["partial"] is True
+        assert result["error_kind"] == "thinking_budget_exhausted"
+        assert "Thinking budget exhausted" in result["display_error"]
+        assert "/thinkon" in result["display_error"]
 
     def test_length_empty_content_without_think_tags_retries_normally(self, agent):
         """When finish_reason='length' and content is None but no think tags,

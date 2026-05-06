@@ -516,7 +516,16 @@ export type GatewayEvent =
   | { payload: SubagentEventPayload; session_id?: string; type: 'subagent.complete' }
   | { payload: { rendered?: string; text?: string }; session_id?: string; type: 'message.delta' }
   | {
-      payload?: { reasoning?: string; rendered?: string; text?: string; usage?: Usage }
+      payload?: {
+        display_error?: string
+        error?: Record<string, unknown>
+        reasoning?: string
+        rendered?: string
+        status?: 'complete' | 'error' | 'interrupted' | 'partial'
+        text?: string
+        usage?: Usage
+        warning?: string
+      }
       session_id?: string
       type: 'message.complete'
     }

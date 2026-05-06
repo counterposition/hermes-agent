@@ -59,6 +59,123 @@ describe('createGatewayEventHandler', () => {
     patchUiState({ showReasoning: true })
   })
 
+  it('renders failed message.complete as system error row, not assistant prose', () => {
+    const appended: Msg[] = []
+    const onEvent = createGatewayEventHandler(buildCtx(appended))
+
+    onEvent({
+      payload: {
+        status: 'error',
+        text: 'Model request failed\n\nHTTP 400: invalid model',
+        display_error: 'Model request failed\n\nHTTP 400: invalid model'
+      },
+      type: 'message.complete'
+    } as any)
+
+    expect(appended).toContainEqual({
+      role: 'system',
+      text: 'Model request failed\n\nHTTP 400: invalid model'
+    })
+    expect(appended.some(m => m.role === 'assistant' && m.text.includes('Model request failed'))).toBe(false)
+  })
+
+  it('uses display_error when failed completion omits text', () => {
+    const appended: Msg[] = []
+    const onEvent = createGatewayEventHandler(buildCtx(appended))
+
+    onEvent({
+      payload: {
+        status: 'error',
+        display_error: 'Model request failed\n\nHTTP 400: invalid model'
+      },
+      type: 'message.complete'
+    } as any)
+
+    expect(appended).toContainEqual({
+      role: 'system',
+      text: 'Model request failed\n\nHTTP 400: invalid model'
+    })
+    expect(appended.some(m => m.role === 'assistant')).toBe(false)
+  })
+
+  it('preserves archived assistant/tool segments before a terminal error row', () => {
+    const appended: Msg[] = []
+    const onEvent = createGatewayEventHandler(buildCtx(appended))
+
+    onEvent({ payload: { text: 'Useful streamed narration.' }, type: 'message.delta' } as any)
+    turnController.flushStreamingSegment()
+    onEvent({ payload: { context: 'lookup', name: 'search', tool_id: 'tool-1' }, type: 'tool.start' } as any)
+    onEvent({ payload: { summary: 'done', tool_id: 'tool-1' }, type: 'tool.complete' } as any)
+    onEvent({
+      payload: {
+        status: 'error',
+        text: 'Model request failed\n\nHTTP 400: invalid model',
+        display_error: 'Model request failed\n\nHTTP 400: invalid model'
+      },
+      type: 'message.complete'
+    } as any)
+
+    expect(appended.some(m => m.role === 'assistant' && m.text.includes('Useful streamed narration'))).toBe(true)
+    expect(appended.some(m => m.kind === 'trail' && m.tools?.length)).toBe(true)
+    expect(appended[appended.length - 1]).toMatchObject({
+      role: 'system',
+      text: 'Model request failed\n\nHTTP 400: invalid model'
+    })
+    expect(appended.some(m => m.role === 'assistant' && m.text.includes('Model request failed'))).toBe(false)
+  })
+
+  it('does not split runtime error text into reasoning blocks', () => {
+    const appended: Msg[] = []
+    const onEvent = createGatewayEventHandler(buildCtx(appended))
+
+    onEvent({
+      payload: {
+        status: 'error',
+        text: 'Provider said <thinking>not model reasoning</thinking>',
+        display_error: 'Provider said <thinking>not model reasoning</thinking>'
+      },
+      type: 'message.complete'
+    } as any)
+
+    expect(appended).toContainEqual({ role: 'system', text: 'Provider said <thinking>not model reasoning</thinking>' })
+    expect(appended.some(m => m.thinking?.includes('not model reasoning'))).toBe(false)
+  })
+
+  it('keeps partial turns with assistant text as assistant output', () => {
+    const appended: Msg[] = []
+    const onEvent = createGatewayEventHandler(buildCtx(appended))
+
+    onEvent({
+      payload: {
+        status: 'partial',
+        text: 'Useful partial answer',
+        display_error: '⚠️ Request incomplete: Response truncated'
+      },
+      type: 'message.complete'
+    } as any)
+
+    expect(appended).toContainEqual({ role: 'assistant', text: 'Useful partial answer' })
+    expect(appended.some(m => m.role === 'system' && m.text.includes('Request incomplete'))).toBe(false)
+  })
+
+  it('renders partial no-output turn warnings as system rows', () => {
+    const appended: Msg[] = []
+    const onEvent = createGatewayEventHandler(buildCtx(appended))
+    const warning = '⚠️ Request incomplete: Response truncated'
+
+    onEvent({
+      payload: {
+        status: 'partial',
+        text: warning,
+        display_error: warning
+      },
+      type: 'message.complete'
+    } as any)
+
+    expect(appended).toContainEqual({ role: 'system', text: warning })
+    expect(appended.some(m => m.role === 'assistant' && m.text === warning)).toBe(false)
+  })
+
   it('archives incomplete todos into transcript flow at end of turn so they scroll up', () => {
     const appended: Msg[] = []
 

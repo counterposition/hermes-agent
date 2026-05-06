@@ -17,6 +17,12 @@ from typing import Any, Optional
 
 from hermes_constants import get_hermes_home
 from hermes_cli.env_loader import load_hermes_dotenv
+from agent.run_result_display import (
+    agent_result_display_error,
+    agent_result_error_metadata,
+    agent_result_status,
+    agent_result_visible_text,
+)
 from utils import is_truthy_value
 from tui_gateway.transport import (
     StdioTransport,
@@ -3131,20 +3137,24 @@ def _run_prompt_submit(rid, sid: str, session: dict, text: Any) -> None:
                     sid, session, clear_pending_title=False, restart_slash_worker=True,
                 )
 
-                raw = result.get("final_response", "")
-                status = (
-                    "interrupted"
-                    if result.get("interrupted")
-                    else "error" if result.get("error") else "complete"
-                )
+                raw = agent_result_visible_text(result)
+                status = agent_result_status(result)
+                display_error = agent_result_display_error(result)
+                error_metadata = agent_result_error_metadata(result)
                 lr = result.get("last_reasoning")
                 if isinstance(lr, str) and lr.strip():
                     last_reasoning = lr.strip()
             else:
                 raw = str(result)
                 status = "complete"
+                display_error = ""
+                error_metadata = {}
 
             payload = {"text": raw, "usage": _get_usage(agent), "status": status}
+            if display_error:
+                payload["display_error"] = display_error
+            if error_metadata:
+                payload["error"] = error_metadata
             if last_reasoning:
                 payload["reasoning"] = last_reasoning
             if status_note:
@@ -3475,7 +3485,7 @@ def _(rid, params: dict) -> dict:
                 {
                     "task_id": task_id,
                     "text": (
-                        result.get("final_response", str(result))
+                        agent_result_visible_text(result)
                         if isinstance(result, dict)
                         else str(result)
                     ),

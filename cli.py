@@ -69,6 +69,7 @@ from agent.usage_pricing import (
     format_duration_compact,
     format_token_count_compact,
 )
+from agent.run_result_display import agent_result_status, agent_result_visible_text
 # NOTE: `from agent.account_usage import ...` is deliberately NOT at module
 # top — it transitively pulls the OpenAI SDK chain (~230 ms cold) and is only
 # needed when the user runs `/limits`. Lazy-imported inside the handler below.
@@ -7062,9 +7063,8 @@ class HermesCLI:
                     task_id=task_id,
                 )
 
-                response = result.get("final_response", "") if result else ""
-                if not response and result and result.get("error"):
-                    response = f"Error: {result['error']}"
+                result_status = agent_result_status(result) if result else "complete"
+                response = agent_result_visible_text(result) if result else ""
 
                 # Display result in the CLI (thread-safe via patch_stdout).
                 # Force a TUI refresh first so spinner/status bar don't overlap
@@ -7074,7 +7074,12 @@ class HermesCLI:
                     time.sleep(0.05)  # brief pause for refresh
                 print()
                 ChatConsole().print(f"[{_accent_hex()}]{'─' * 40}[/]")
-                _cprint(f"  ✅ Background task #{task_num} complete")
+                if result_status == "error":
+                    _cprint(f"  ❌ Background task #{task_num} failed")
+                elif result_status == "partial":
+                    _cprint(f"  ⚠️ Background task #{task_num} incomplete")
+                else:
+                    _cprint(f"  ✅ Background task #{task_num} complete")
                 _cprint(f"  Prompt: \"{prompt[:60]}{'...' if len(prompt) > 60 else ''}\"")
                 ChatConsole().print(f"[{_accent_hex()}]{'─' * 40}[/]")
                 if response:
@@ -7088,6 +7093,13 @@ class HermesCLI:
                         label = "⚕ Hermes"
                         _resp_color = "#CD7F32"
                         _resp_text = "#FFF8DC"
+
+                    if result_status == "error":
+                        label = "⚠ Runtime error"
+                        _resp_color = "red"
+                    elif result_status == "partial":
+                        label = "⚠ Partial result"
+                        _resp_color = "yellow"
 
                     _chat_console = ChatConsole()
                     _chat_console.print(Panel(
@@ -9753,8 +9765,9 @@ class HermesCLI:
                 self.session_id = self.agent.session_id
                 self._pending_title = None
 
-            # Get the final response
-            response = result.get("final_response", "") if result else ""
+            # Get the final response or presentation-safe failure text
+            result_status = agent_result_status(result) if result else "complete"
+            response = agent_result_visible_text(result) if result else ""
 
             # Auto-generate session title after first exchange (non-blocking)
             if response and result and not result.get("failed") and not result.get("partial"):
@@ -9785,14 +9798,9 @@ class HermesCLI:
                 except Exception:
                     pass
 
-            # Handle failed or partial results (e.g., non-retryable errors, rate limits,
-            # truncated output, invalid tool calls). Both "failed" and "partial" with
-            # an empty final_response mean the agent couldn't produce a usable answer.
-            if result and (result.get("failed") or result.get("partial")) and not response:
-                error_detail = result.get("error", "Unknown error")
-                response = f"Error: {error_detail}"
-                # Stop continuous voice mode on persistent errors (e.g. 429 rate limit)
-                # to avoid an infinite error → record → error loop
+            # Stop continuous voice mode on persistent no-output failures
+            # (for example provider 4xx/429) to avoid an infinite error → record → error loop.
+            if result and result_status in {"error", "partial"} and not result.get("final_response"):
                 if self._voice_continuous:
                     self._voice_continuous = False
                     _cprint(f"\n{_DIM}Continuous voice mode stopped due to error.{_RST}")
@@ -9844,6 +9852,13 @@ class HermesCLI:
                     _resp_color = "#CD7F32"
                     _resp_text = "#FFF8DC"
 
+                if result_status == "error":
+                    label = "⚠ Runtime error"
+                    _resp_color = "red"
+                elif result_status == "partial" and result and not result.get("final_response"):
+                    label = "⚠ Partial result"
+                    _resp_color = "yellow"
+
                 is_error_response = result and (result.get("failed") or result.get("partial"))
                 already_streamed = self._stream_started and self._stream_box_opened and not is_error_response
                 if use_streaming_tts and _streaming_box_opened and not is_error_response:
@@ -9886,7 +9901,7 @@ class HermesCLI:
 
             # Speak response aloud if voice TTS is enabled
             # Skip batch TTS when streaming TTS already handled it
-            if self._voice_tts and response and not use_streaming_tts:
+            if self._voice_tts and response and not use_streaming_tts and result_status == "complete":
                 self._voice_speak_response_async(response)
 
 
@@ -12469,9 +12484,14 @@ def main(
                         and cli.agent.session_id != cli.session_id
                     ):
                         cli.session_id = cli.agent.session_id
-                    response = result.get("final_response", "") if isinstance(result, dict) else str(result)
+                    response = agent_result_visible_text(result) if isinstance(result, dict) else str(result)
+                    is_failure_display = (
+                        isinstance(result, dict)
+                        and agent_result_status(result) in {"error", "partial"}
+                        and not result.get("final_response")
+                    )
                     if response:
-                        print(response)
+                        print(response, file=sys.stderr if is_failure_display else sys.stdout)
                     # Session ID goes to stderr so piped stdout is clean.
                     print(f"\nsession_id: {cli.session_id}", file=sys.stderr)
                     

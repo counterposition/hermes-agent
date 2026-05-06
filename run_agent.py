@@ -4117,6 +4117,108 @@ class AIAgent:
         prefix = f"HTTP {status_code}: " if status_code else ""
         return f"{prefix}{raw[:500]}"
 
+    _FAILURE_RESULT_EXTRA_KEYS = {
+        "compression_exhausted",
+        "pending_steer",
+        "session_id",
+    }
+
+    @staticmethod
+    def _redact_failure_text(value: object) -> str:
+        from agent.redact import redact_sensitive_text
+
+        return redact_sensitive_text(str(value or ""), force=True)
+
+    def _format_failure_display_error(
+        self,
+        *,
+        title: str,
+        summary: str,
+        provider: str | None = None,
+        model: str | None = None,
+        base_url: str | None = None,
+        detail: str | None = None,
+    ) -> str:
+        lines = [title, ""]
+        if detail:
+            lines.append(detail)
+        if summary:
+            lines.append(summary)
+
+        meta = []
+        if provider:
+            meta.append(("Provider", provider))
+        if model:
+            meta.append(("Model", model))
+        if base_url:
+            meta.append(("Endpoint", base_url))
+        if meta:
+            lines.append("")
+            lines.extend(f"{label}: {value}" for label, value in meta)
+        return self._redact_failure_text("\n".join(lines))
+
+    def _make_failure_result(
+        self,
+        *,
+        error,
+        messages,
+        api_calls: int,
+        failed: bool,
+        completed: bool = False,
+        partial: bool = False,
+        error_kind: str = "provider_error",
+        status_code: int | None = None,
+        provider: str | None = None,
+        model: str | None = None,
+        base_url: str | None = None,
+        title: str = "Model request failed",
+        detail: str | None = None,
+        display_error: str | None = None,
+        extra_fields: dict[str, object] | None = None,
+    ) -> dict:
+        raw_summary = self._summarize_api_error(error) if isinstance(error, Exception) else str(error)
+        summary = self._redact_failure_text(raw_summary)
+        raw_error = self._redact_failure_text(error)
+        _provider_value = provider if provider is not None else self.provider
+        _model_value = model if model is not None else self.model
+        _base_value = base_url if base_url is not None else self.base_url
+        effective_provider = self._redact_failure_text(_provider_value) if _provider_value else _provider_value
+        effective_model = self._redact_failure_text(_model_value) if _model_value else _model_value
+        effective_base_url = self._redact_failure_text(_base_value) if _base_value else _base_value
+
+        result = {
+            "final_response": None,
+            "messages": messages,
+            "api_calls": api_calls,
+            "completed": completed,
+            "error": raw_error,
+            "error_summary": summary,
+            "error_kind": error_kind,
+            "status_code": status_code,
+            "provider": effective_provider,
+            "model": effective_model,
+            "base_url": effective_base_url,
+            "display_error": self._redact_failure_text(display_error)
+            if display_error
+            else self._format_failure_display_error(
+                title=title,
+                summary=summary,
+                provider=effective_provider,
+                model=effective_model,
+                base_url=effective_base_url,
+                detail=detail,
+            ),
+        }
+        if failed:
+            result["failed"] = True
+        if partial:
+            result["partial"] = True
+        for key, value in (extra_fields or {}).items():
+            if key not in self._FAILURE_RESULT_EXTRA_KEYS:
+                raise KeyError(f"Unsupported failure-result extra field: {key}")
+            result[key] = value
+        return result
+
     def _mask_api_key_for_logs(self, key: Optional[str]) -> Optional[str]:
         if not key:
             return None
@@ -11301,19 +11403,21 @@ class AIAgent:
                                 continue
                             # No fallback available — return with clear message
                             self._persist_session(messages, conversation_history)
-                            return {
-                                "final_response": (
-                                    f"⏳ {_nous_msg}\n\n"
-                                    "No fallback provider available. "
-                                    "Try again after the reset, or add a "
-                                    "fallback provider in config.yaml."
+                            return self._make_failure_result(
+                                error=_nous_msg,
+                                messages=messages,
+                                api_calls=api_call_count,
+                                failed=True,
+                                error_kind="nous_rate_limit_active",
+                                provider=self.provider,
+                                model=self.model,
+                                base_url=self.base_url,
+                                title="Nous Portal rate limit active",
+                                detail=(
+                                    "No fallback provider available. Try again after the reset, "
+                                    "or add a fallback provider in config.yaml."
                                 ),
-                                "messages": messages,
-                                "api_calls": api_call_count,
-                                "completed": False,
-                                "failed": True,
-                                "error": _nous_msg,
-                            }
+                            )
                     except ImportError:
                         pass
                     except Exception:
@@ -11594,13 +11698,19 @@ class AIAgent:
                             self._emit_status(f"❌ Max retries ({max_retries}) exceeded for invalid responses. Giving up.")
                             logging.error(f"{self.log_prefix}Invalid API response after {max_retries} retries.")
                             self._persist_session(messages, conversation_history)
-                            return {
-                                "messages": messages,
-                                "completed": False,
-                                "api_calls": api_call_count,
-                                "error": f"Invalid API response after {max_retries} retries: {_failure_hint}",
-                                "failed": True  # Mark as failure for filtering
-                            }
+                            return self._make_failure_result(
+                                error=f"Invalid API response after {max_retries} retries: {_failure_hint}",
+                                messages=messages,
+                                api_calls=api_call_count,
+                                failed=True,
+                                error_kind="invalid_api_response",
+                                status_code=_resp_error_code,
+                                provider=self.provider,
+                                model=self.model,
+                                base_url=self.base_url,
+                                title="Invalid API response",
+                                detail="The provider returned invalid or malformed response data after retries.",
+                            )
                         
                         # Backoff before retry — jittered exponential: 5s base, 120s cap
                         wait_time = jittered_backoff(retry_count, base_delay=5.0, max_delay=120.0)
@@ -11732,27 +11842,25 @@ class AIAgent:
                                 f"no visible response was produced.",
                                 force=True,
                             )
-                            # Return a user-friendly message as the response so
-                            # CLI (response box) and gateway (chat message) both
-                            # display it naturally instead of a suppressed error.
-                            _exhaust_response = (
-                                "⚠️ **Thinking Budget Exhausted**\n\n"
-                                "The model used all its output tokens on reasoning "
-                                "and had none left for the actual response.\n\n"
-                                "To fix this:\n"
-                                "→ Lower reasoning effort: `/thinkon low` or `/thinkon minimal`\n"
-                                "→ Or switch to a larger/non-reasoning model with `/model`"
-                            )
                             self._cleanup_task_resources(effective_task_id)
                             self._persist_session(messages, conversation_history)
-                            return {
-                                "final_response": _exhaust_response,
-                                "messages": messages,
-                                "api_calls": api_call_count,
-                                "completed": False,
-                                "partial": True,
-                                "error": _exhaust_error,
-                            }
+                            return self._make_failure_result(
+                                error=_exhaust_error,
+                                messages=messages,
+                                api_calls=api_call_count,
+                                failed=False,
+                                partial=True,
+                                error_kind="thinking_budget_exhausted",
+                                provider=self.provider,
+                                model=self.model,
+                                base_url=self.base_url,
+                                title="Thinking budget exhausted",
+                                detail=(
+                                    "The model used all its output tokens on reasoning and had none left "
+                                    "for the actual response. Lower reasoning effort with `/thinkon low` "
+                                    "or `/thinkon minimal`, or switch to a larger/non-reasoning model."
+                                ),
+                            )
 
                         if self.api_mode in ("chat_completions", "bedrock_converse", "anthropic_messages"):
                             assistant_message = _trunc_msg
@@ -11785,14 +11893,35 @@ class AIAgent:
                                 partial_response = self._strip_think_blocks(truncated_response_prefix).strip()
                                 self._cleanup_task_resources(effective_task_id)
                                 self._persist_session(messages, conversation_history)
-                                return {
-                                    "final_response": partial_response or None,
-                                    "messages": messages,
-                                    "api_calls": api_call_count,
-                                    "completed": False,
-                                    "partial": True,
-                                    "error": "Response remained truncated after 3 continuation attempts",
-                                }
+                                if partial_response:
+                                    return {
+                                        "final_response": partial_response,
+                                        "messages": messages,
+                                        "api_calls": api_call_count,
+                                        "completed": False,
+                                        "partial": True,
+                                        "error": "Response remained truncated after 3 continuation attempts",
+                                        "error_summary": "Response remained truncated after 3 continuation attempts",
+                                        "display_error": self._format_failure_display_error(
+                                            title="Response truncated",
+                                            summary="Response remained truncated after 3 continuation attempts",
+                                            provider=self.provider,
+                                            model=self.model,
+                                            base_url=self.base_url,
+                                        ),
+                                    }
+                                return self._make_failure_result(
+                                    error="Response remained truncated after 3 continuation attempts",
+                                    messages=messages,
+                                    api_calls=api_call_count,
+                                    failed=False,
+                                    partial=True,
+                                    error_kind="response_truncated",
+                                    provider=self.provider,
+                                    model=self.model,
+                                    base_url=self.base_url,
+                                    title="Response truncated",
+                                )
 
                         if self.api_mode in ("chat_completions", "bedrock_converse", "anthropic_messages"):
                             assistant_message = _trunc_msg
@@ -11813,14 +11942,18 @@ class AIAgent:
                                 )
                                 self._cleanup_task_resources(effective_task_id)
                                 self._persist_session(messages, conversation_history)
-                                return {
-                                    "final_response": None,
-                                    "messages": messages,
-                                    "api_calls": api_call_count,
-                                    "completed": False,
-                                    "partial": True,
-                                    "error": "Response truncated due to output length limit",
-                                }
+                                return self._make_failure_result(
+                                    error="Response truncated due to output length limit",
+                                    messages=messages,
+                                    api_calls=api_call_count,
+                                    failed=False,
+                                    partial=True,
+                                    error_kind="truncated_tool_call",
+                                    provider=self.provider,
+                                    model=self.model,
+                                    base_url=self.base_url,
+                                    title="Response truncated",
+                                )
 
                         # If we have prior messages, roll back to last complete state
                         if len(messages) > 1:
@@ -11830,26 +11963,33 @@ class AIAgent:
                             self._cleanup_task_resources(effective_task_id)
                             self._persist_session(messages, conversation_history)
 
-                            return {
-                                "final_response": None,
-                                "messages": rolled_back_messages,
-                                "api_calls": api_call_count,
-                                "completed": False,
-                                "partial": True,
-                                "error": "Response truncated due to output length limit"
-                            }
+                            return self._make_failure_result(
+                                error="Response truncated due to output length limit",
+                                messages=rolled_back_messages,
+                                api_calls=api_call_count,
+                                failed=False,
+                                partial=True,
+                                error_kind="response_truncated",
+                                provider=self.provider,
+                                model=self.model,
+                                base_url=self.base_url,
+                                title="Response truncated",
+                            )
                         else:
                             # First message was truncated - mark as failed
                             self._vprint(f"{self.log_prefix}❌ First response truncated - cannot recover", force=True)
                             self._persist_session(messages, conversation_history)
-                            return {
-                                "final_response": None,
-                                "messages": messages,
-                                "api_calls": api_call_count,
-                                "completed": False,
-                                "failed": True,
-                                "error": "First response truncated due to output length limit"
-                            }
+                            return self._make_failure_result(
+                                error="First response truncated due to output length limit",
+                                messages=messages,
+                                api_calls=api_call_count,
+                                failed=True,
+                                error_kind="response_truncated",
+                                provider=self.provider,
+                                model=self.model,
+                                base_url=self.base_url,
+                                title="Response truncated",
+                            )
                     
                     # Track actual token usage from response for context management
                     if hasattr(response, 'usage') and response.usage:
@@ -12633,15 +12773,21 @@ class AIAgent:
                             self._vprint(f"{self.log_prefix}   💡 Try /new to start a fresh conversation, or /compress to retry compression.", force=True)
                             logging.error(f"{self.log_prefix}413 compression failed after {max_compression_attempts} attempts.")
                             self._persist_session(messages, conversation_history)
-                            return {
-                                "messages": messages,
-                                "completed": False,
-                                "api_calls": api_call_count,
-                                "error": f"Request payload too large: max compression attempts ({max_compression_attempts}) reached.",
-                                "partial": True,
-                                "failed": True,
-                                "compression_exhausted": True,
-                            }
+                            return self._make_failure_result(
+                                error=f"Request payload too large: max compression attempts ({max_compression_attempts}) reached.",
+                                messages=messages,
+                                api_calls=api_call_count,
+                                failed=True,
+                                partial=True,
+                                error_kind="payload_compression_exhausted",
+                                status_code=status_code,
+                                provider=_provider,
+                                model=_model,
+                                base_url=_base,
+                                title="Request payload too large",
+                                detail="Hermes could not shrink the request enough to fit the provider limit.",
+                                extra_fields={"compression_exhausted": True},
+                            )
                         self._emit_status(f"⚠️  Request payload too large (413) — compression attempt {compression_attempts}/{max_compression_attempts}...")
 
                         original_len = len(messages)
@@ -12664,15 +12810,21 @@ class AIAgent:
                             self._vprint(f"{self.log_prefix}   💡 Try /new to start a fresh conversation, or /compress to retry compression.", force=True)
                             logging.error(f"{self.log_prefix}413 payload too large. Cannot compress further.")
                             self._persist_session(messages, conversation_history)
-                            return {
-                                "messages": messages,
-                                "completed": False,
-                                "api_calls": api_call_count,
-                                "error": "Request payload too large (413). Cannot compress further.",
-                                "partial": True,
-                                "failed": True,
-                                "compression_exhausted": True,
-                            }
+                            return self._make_failure_result(
+                                error="Request payload too large (413). Cannot compress further.",
+                                messages=messages,
+                                api_calls=api_call_count,
+                                failed=True,
+                                partial=True,
+                                error_kind="payload_compression_exhausted",
+                                status_code=status_code,
+                                provider=_provider,
+                                model=_model,
+                                base_url=_base,
+                                title="Request payload too large",
+                                detail="Hermes could not shrink the request any further.",
+                                extra_fields={"compression_exhausted": True},
+                            )
 
                     # Check for context-length errors BEFORE generic 4xx handler.
                     # The classifier detects context overflow from: explicit error
@@ -12717,15 +12869,21 @@ class AIAgent:
                                 self._vprint(f"{self.log_prefix}   💡 Try /new to start a fresh conversation, or /compress to retry compression.", force=True)
                                 logging.error(f"{self.log_prefix}Context compression failed after {max_compression_attempts} attempts.")
                                 self._persist_session(messages, conversation_history)
-                                return {
-                                    "messages": messages,
-                                    "completed": False,
-                                    "api_calls": api_call_count,
-                                    "error": f"Context length exceeded: max compression attempts ({max_compression_attempts}) reached.",
-                                    "partial": True,
-                                    "failed": True,
-                                    "compression_exhausted": True,
-                                }
+                                return self._make_failure_result(
+                                    error=f"Context length exceeded: max compression attempts ({max_compression_attempts}) reached.",
+                                    messages=messages,
+                                    api_calls=api_call_count,
+                                    failed=True,
+                                    partial=True,
+                                    error_kind="context_compression_exhausted",
+                                    status_code=status_code,
+                                    provider=_provider,
+                                    model=_model,
+                                    base_url=_base,
+                                    title="Context length exceeded",
+                                    detail="Hermes could not reduce the conversation enough to retry safely.",
+                                    extra_fields={"compression_exhausted": True},
+                                )
                             restart_with_compressed_messages = True
                             break
 
@@ -12790,15 +12948,21 @@ class AIAgent:
                             self._vprint(f"{self.log_prefix}   💡 Try /new to start a fresh conversation, or /compress to retry compression.", force=True)
                             logging.error(f"{self.log_prefix}Context compression failed after {max_compression_attempts} attempts.")
                             self._persist_session(messages, conversation_history)
-                            return {
-                                "messages": messages,
-                                "completed": False,
-                                "api_calls": api_call_count,
-                                "error": f"Context length exceeded: max compression attempts ({max_compression_attempts}) reached.",
-                                "partial": True,
-                                "failed": True,
-                                "compression_exhausted": True,
-                            }
+                            return self._make_failure_result(
+                                error=f"Context length exceeded: max compression attempts ({max_compression_attempts}) reached.",
+                                messages=messages,
+                                api_calls=api_call_count,
+                                failed=True,
+                                partial=True,
+                                error_kind="context_compression_exhausted",
+                                status_code=status_code,
+                                provider=_provider,
+                                model=_model,
+                                base_url=_base,
+                                title="Context length exceeded",
+                                detail="Hermes could not reduce the conversation enough to retry safely.",
+                                extra_fields={"compression_exhausted": True},
+                            )
                         self._emit_status(f"🗜️ Context too large (~{approx_tokens:,} tokens) — compressing ({compression_attempts}/{max_compression_attempts})...")
 
                         original_len = len(messages)
@@ -12823,15 +12987,21 @@ class AIAgent:
                             self._vprint(f"{self.log_prefix}   💡 The conversation has accumulated too much content. Try /new to start fresh, or /compress to manually trigger compression.", force=True)
                             logging.error(f"{self.log_prefix}Context length exceeded: {approx_tokens:,} tokens. Cannot compress further.")
                             self._persist_session(messages, conversation_history)
-                            return {
-                                "messages": messages,
-                                "completed": False,
-                                "api_calls": api_call_count,
-                                "error": f"Context length exceeded ({approx_tokens:,} tokens). Cannot compress further.",
-                                "partial": True,
-                                "failed": True,
-                                "compression_exhausted": True,
-                            }
+                            return self._make_failure_result(
+                                error=f"Context length exceeded ({approx_tokens:,} tokens). Cannot compress further.",
+                                messages=messages,
+                                api_calls=api_call_count,
+                                failed=True,
+                                partial=True,
+                                error_kind="context_compression_exhausted",
+                                status_code=status_code,
+                                provider=_provider,
+                                model=_model,
+                                base_url=_base,
+                                title="Context length exceeded",
+                                detail="Hermes could not compress the conversation further.",
+                                extra_fields={"compression_exhausted": True},
+                            )
 
                     # Check for non-retryable client errors.  The classifier
                     # already accounts for 413, 429, 529 (transient), context
@@ -12924,14 +13094,19 @@ class AIAgent:
                             )
                         else:
                             self._persist_session(messages, conversation_history)
-                        return {
-                            "final_response": None,
-                            "messages": messages,
-                            "api_calls": api_call_count,
-                            "completed": False,
-                            "failed": True,
-                            "error": str(api_error),
-                        }
+                        return self._make_failure_result(
+                            error=api_error,
+                            messages=messages,
+                            api_calls=api_call_count,
+                            failed=True,
+                            error_kind="non_retryable_client_error",
+                            status_code=status_code,
+                            provider=_provider,
+                            model=_model,
+                            base_url=_base,
+                            title="Model request failed",
+                            detail="The provider rejected the request before generation.",
+                        )
 
                     if retry_count >= max_retries:
                         # Before falling back, try rebuilding the primary
@@ -12997,24 +13172,27 @@ class AIAgent:
                                 api_kwargs, reason="max_retries_exhausted", error=api_error,
                             )
                         self._persist_session(messages, conversation_history)
-                        _final_response = f"API call failed after {max_retries} retries: {_final_summary}"
+                        _final_detail = None
                         if _is_stream_drop:
-                            _final_response += (
-                                "\n\nThe provider's stream connection keeps "
-                                "dropping — this often happens when generating "
-                                "very large tool call responses (e.g. write_file "
-                                "with long content). Try asking me to use "
-                                "execute_code with Python's open() for large "
-                                "files, or to write in smaller sections."
+                            _final_detail = (
+                                "The provider's stream connection keeps dropping. This often happens "
+                                "when generating very large tool call responses (for example, write_file "
+                                "with long content). Try asking me to use execute_code with Python's open() "
+                                "for large files, or to write in smaller sections."
                             )
-                        return {
-                            "final_response": _final_response,
-                            "messages": messages,
-                            "api_calls": api_call_count,
-                            "completed": False,
-                            "failed": True,
-                            "error": _final_summary,
-                        }
+                        return self._make_failure_result(
+                            error=api_error,
+                            messages=messages,
+                            api_calls=api_call_count,
+                            failed=True,
+                            error_kind="api_retries_exhausted",
+                            status_code=status_code,
+                            provider=_provider,
+                            model=_model,
+                            base_url=_base,
+                            title="API call failed after retries",
+                            detail=_final_detail,
+                        )
 
                     # For rate limits, respect the Retry-After header if present
                     _retry_after = None
@@ -13203,14 +13381,18 @@ class AIAgent:
                         self._cleanup_task_resources(effective_task_id)
                         self._persist_session(messages, conversation_history)
                         
-                        return {
-                            "final_response": None,
-                            "messages": rolled_back_messages,
-                            "api_calls": api_call_count,
-                            "completed": False,
-                            "partial": True,
-                            "error": "Incomplete REASONING_SCRATCHPAD after 2 retries"
-                        }
+                        return self._make_failure_result(
+                            error="Incomplete REASONING_SCRATCHPAD after 2 retries",
+                            messages=rolled_back_messages,
+                            api_calls=api_call_count,
+                            failed=False,
+                            partial=True,
+                            error_kind="incomplete_reasoning_scratchpad",
+                            provider=self.provider,
+                            model=self.model,
+                            base_url=self.base_url,
+                            title="Reasoning scratchpad incomplete",
+                        )
                 
                 # Reset incomplete scratchpad counter on clean response
                 self._incomplete_scratchpad_retries = 0
@@ -13264,14 +13446,18 @@ class AIAgent:
 
                     self._codex_incomplete_retries = 0
                     self._persist_session(messages, conversation_history)
-                    return {
-                        "final_response": None,
-                        "messages": messages,
-                        "api_calls": api_call_count,
-                        "completed": False,
-                        "partial": True,
-                        "error": "Codex response remained incomplete after 3 continuation attempts",
-                    }
+                    return self._make_failure_result(
+                        error="Codex response remained incomplete after 3 continuation attempts",
+                        messages=messages,
+                        api_calls=api_call_count,
+                        failed=False,
+                        partial=True,
+                        error_kind="codex_response_incomplete",
+                        provider=self.provider,
+                        model=self.model,
+                        base_url=self.base_url,
+                        title="Model response incomplete",
+                    )
                 elif hasattr(self, "_codex_incomplete_retries"):
                     self._codex_incomplete_retries = 0
                 
@@ -13310,14 +13496,18 @@ class AIAgent:
                             self._vprint(f"{self.log_prefix}❌ Max retries (3) for invalid tool calls exceeded. Stopping as partial.", force=True)
                             self._invalid_tool_retries = 0
                             self._persist_session(messages, conversation_history)
-                            return {
-                                "final_response": None,
-                                "messages": messages,
-                                "api_calls": api_call_count,
-                                "completed": False,
-                                "partial": True,
-                                "error": f"Model generated invalid tool call: {invalid_preview}"
-                            }
+                            return self._make_failure_result(
+                                error=f"Model generated invalid tool call: {invalid_preview}",
+                                messages=messages,
+                                api_calls=api_call_count,
+                                failed=False,
+                                partial=True,
+                                error_kind="invalid_tool_call",
+                                provider=self.provider,
+                                model=self.model,
+                                base_url=self.base_url,
+                                title="Invalid tool call generated",
+                            )
 
                         assistant_msg = self._build_assistant_message(assistant_message, finish_reason)
                         messages.append(assistant_msg)
@@ -13377,14 +13567,18 @@ class AIAgent:
                             self._invalid_json_retries = 0
                             self._cleanup_task_resources(effective_task_id)
                             self._persist_session(messages, conversation_history)
-                            return {
-                                "final_response": None,
-                                "messages": messages,
-                                "api_calls": api_call_count,
-                                "completed": False,
-                                "partial": True,
-                                "error": "Response truncated due to output length limit",
-                            }
+                            return self._make_failure_result(
+                                error="Response truncated due to output length limit",
+                                messages=messages,
+                                api_calls=api_call_count,
+                                failed=False,
+                                partial=True,
+                                error_kind="truncated_tool_arguments",
+                                provider=self.provider,
+                                model=self.model,
+                                base_url=self.base_url,
+                                title="Response truncated",
+                            )
 
                         # Track retries for invalid JSON arguments
                         self._invalid_json_retries += 1

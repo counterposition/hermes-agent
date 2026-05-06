@@ -637,6 +637,98 @@ def _session(agent=None, **extra):
     }
 
 
+class _ImmediateThread:
+    def __init__(self, target=None, daemon=None, **_kwargs):
+        self._target = target
+
+    def start(self):
+        self._target()
+
+
+def test_prompt_submit_failed_empty_result_emits_error_text(monkeypatch):
+    emits = []
+
+    class _Agent:
+        session_id = "session-key"
+
+        def run_conversation(self, prompt, conversation_history=None, stream_callback=None):
+            return {
+                "final_response": None,
+                "failed": True,
+                "completed": False,
+                "error": "raw SDK dump",
+                "error_summary": "HTTP 400: gemini-3.1-pro is not a valid model ID",
+                "error_kind": "non_retryable_client_error",
+                "status_code": 400,
+                "provider": "openrouter",
+                "model": "gemini-3.1-pro",
+                "base_url": "https://openrouter.ai/api/v1",
+                "display_error": "Model request failed\n\nHTTP 400: gemini-3.1-pro is not a valid model ID",
+                "messages": [{"role": "user", "content": prompt}],
+            }
+
+    server._sessions["sid"] = _session(agent=_Agent())
+    monkeypatch.setattr(server.threading, "Thread", _ImmediateThread)
+    monkeypatch.setattr(server, "_emit", lambda *args, **kwargs: emits.append(args))
+    monkeypatch.setattr(server, "make_stream_renderer", lambda cols: None)
+    monkeypatch.setattr(server, "render_message", lambda raw, cols: None)
+
+    try:
+        resp = server.handle_request(
+            {"id": "1", "method": "prompt.submit", "params": {"session_id": "sid", "text": "ping"}}
+        )
+
+        assert resp["result"]["status"] == "streaming"
+        complete = [args for args in emits if args[0] == "message.complete"][-1]
+        payload = complete[2]
+        assert payload["status"] == "error"
+        assert payload["display_error"] == payload["text"]
+        assert payload["error"]["error_summary"].startswith("HTTP 400")
+        assert payload["error"]["status_code"] == 400
+        assert "Model request failed" in payload["text"]
+        assert "gemini-3.1-pro" in payload["text"]
+    finally:
+        server._sessions.pop("sid", None)
+
+
+def test_prompt_submit_partial_empty_result_emits_partial_text(monkeypatch):
+    emits = []
+
+    class _Agent:
+        session_id = "session-key"
+
+        def run_conversation(self, prompt, conversation_history=None, stream_callback=None):
+            return {
+                "final_response": None,
+                "partial": True,
+                "completed": False,
+                "error_summary": "Response truncated due to output length limit",
+                "display_error": "Response truncated\n\nThe model stopped before completing the turn.",
+                "messages": [{"role": "user", "content": prompt}],
+            }
+
+    server._sessions["sid"] = _session(agent=_Agent())
+    monkeypatch.setattr(server.threading, "Thread", _ImmediateThread)
+    monkeypatch.setattr(server, "_emit", lambda *args, **kwargs: emits.append(args))
+    monkeypatch.setattr(server, "make_stream_renderer", lambda cols: None)
+    monkeypatch.setattr(server, "render_message", lambda raw, cols: None)
+
+    try:
+        resp = server.handle_request(
+            {"id": "1", "method": "prompt.submit", "params": {"session_id": "sid", "text": "ping"}}
+        )
+
+        assert resp["result"]["status"] == "streaming"
+        complete = [args for args in emits if args[0] == "message.complete"][-1]
+        payload = complete[2]
+        assert payload["status"] == "partial"
+        assert payload["display_error"] == payload["text"]
+        assert payload["text"]
+        assert payload["error"]["error_summary"] == "Response truncated due to output length limit"
+    finally:
+        server._sessions.pop("sid", None)
+
+
 def test_session_close_commits_memory_and_fires_finalize_hook(monkeypatch):
     calls = {"hooks": []}
 

@@ -428,7 +428,13 @@ class TurnController {
     this.persistedToolLabels.clear()
   }
 
-  recordMessageComplete(payload: { rendered?: string; reasoning?: string; text?: string }) {
+  recordMessageComplete(payload: {
+    display_error?: string
+    rendered?: string
+    reasoning?: string
+    status?: string
+    text?: string
+  }) {
     this.closeReasoningSegment()
 
     // Ink renders markdown via <Md>; the gateway's Rich-rendered ANSI
@@ -437,9 +443,16 @@ class TurnController {
     // `display.final_response_markdown: render` because raw ANSI escapes
     // pass through into the React tree.  Prefer raw text and fall back
     // only when the gateway elected not to send any (#16391).
-    const rawText = (payload.text ?? payload.rendered ?? this.bufRef).trimStart()
-    const split = splitReasoning(rawText)
-    const finalText = finalTail(split.text, this.segmentMessages)
+    const rawText = (payload.text ?? payload.display_error ?? payload.rendered ?? this.bufRef).trimStart()
+    const displayError = String(payload.display_error ?? '').trim()
+    const runtimeErrorText = rawText.trim()
+    const isRuntimeError = payload.status === 'error'
+    const isPartialNoOutputWarning =
+      payload.status === 'partial' && Boolean(displayError) && runtimeErrorText === displayError
+    const renderAsRuntimeRow = isRuntimeError || isPartialNoOutputWarning
+
+    const split = renderAsRuntimeRow ? { reasoning: '', text: rawText } : splitReasoning(rawText)
+    const finalText = renderAsRuntimeRow ? '' : finalTail(split.text, this.segmentMessages)
     const existingReasoning = this.reasoningText.trim() || String(payload.reasoning ?? '').trim()
     const savedReasoning = [existingReasoning, existingReasoning ? '' : split.reasoning].filter(Boolean).join('\n\n')
     const savedToolTokens = this.toolTokenAcc
@@ -493,6 +506,9 @@ class TurnController {
 
     if (finalText) {
       finalMessages.push({ role: 'assistant', text: finalText })
+    }
+    if (renderAsRuntimeRow && runtimeErrorText) {
+      finalMessages.push({ role: 'system', text: runtimeErrorText })
     }
 
     const wasInterrupted = this.interrupted
