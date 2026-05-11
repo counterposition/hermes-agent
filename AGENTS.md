@@ -176,14 +176,13 @@ session-scoped. Assert the GUI session gets the tool **with the env var absent**
 
 ## Development Environment
 
-```bash
-source ./activate   # provisions/syncs PM tools + dependencies, then activates
-```
-Select an isolated development `HERMES_HOME` and `HERMES_RUNTIME_DIR` first;
-see `website/docs/reference/package-management.md#developer-workflow`.
-PowerShell: `. .\activate.ps1`. `deactivate` restores the prior environment.
-For tests, use the independent test environment in `CONTRIBUTING.md` (or Nix);
-PM activation's `PYTHONPATH` does not survive the test runner's environment scrub.
+Use `uv run` for Python commands and `uv sync` for dependencies; no manual
+virtualenv activation is needed. Use `scripts/run_tests.sh` for tests (the test
+interpreter needs `uv sync --group dev --group test`; `default-groups` is empty).
+Upstream's PM activation (`source ./activate`, PowerShell `. .\activate.ps1`) is the
+alternative; select an isolated development `HERMES_HOME` and `HERMES_RUNTIME_DIR` first,
+see `website/docs/reference/package-management.md#developer-workflow`. PM activation's
+`PYTHONPATH` does not survive the test runner's environment scrub.
 `scripts/run_tests.sh` probes `.venv`, then `venv`, then `$HOME/.hermes/hermes-agent/venv`
 (worktrees sharing the main checkout's venv).
 
