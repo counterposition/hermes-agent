@@ -175,9 +175,8 @@ session-scoped. Assert the GUI session gets the tool **with the env var absent**
 
 ## Development Environment
 
-```bash
-source .venv/bin/activate   # or: source venv/bin/activate
-```
+Use `uv run` for Python commands and `uv sync` for dependencies; no manual
+virtualenv activation is needed. Use `scripts/run_tests.sh` for tests.
 `scripts/run_tests.sh` probes `.venv`, then `venv`, then `$HOME/.hermes/hermes-agent/venv`
 (worktrees sharing the main checkout's venv).
 
