@@ -7,11 +7,13 @@
 #
 # What it provisions:
 #   * uv (pinned) — Python toolchain + package manager
-#   * Python 3.11 + locked deps in .venv. `uv sync --locked` asserts uv.lock is
+#   * Python 3.14 + locked deps in .venv. `uv sync --locked` asserts uv.lock is
 #     in sync with pyproject.toml (it fails loudly if a pin was bumped without
 #     re-locking) and installs exactly that locked, reproducible set — the same
-#     .[all,dev] footprint CI installs. The platform-bound extras (matrix,
-#     voice) are intentionally excluded — they don't build cleanly on every arch.
+#     .[all,dev] package footprint CI installs (note: CI runs the suite on
+#     3.11; 3.14 is newer than the CI interpreter). The platform-bound extras
+#     (matrix, voice) are intentionally excluded — they don't build cleanly on
+#     every arch.
 #   * optional: Node workspace deps (ui-tui, web, website) via --with-node
 #
 # Deliberately NOT installed: ripgrep. The only tests that shell out to it skip
@@ -70,13 +72,13 @@ uv --version
 
 # ── Python + locked deps ──────────────────────────────────────────────────────
 # Creates .venv at the repo root, which scripts/run_tests.sh probes for.
-echo "▶ syncing Python 3.11 environment from uv.lock (.[all,dev])"
-uv sync --locked --python 3.11 --extra all --extra dev
+echo "▶ syncing Python 3.14 environment from uv.lock (.[all,dev])"
+uv sync --locked --python 3.14 --extra all --extra dev
 
 # ── Node workspaces (optional) ────────────────────────────────────────────────
 if [ "$WITH_NODE" -eq 1 ]; then
   if ! command -v npm > /dev/null 2>&1; then
-    echo "error: --with-node given but npm is not on PATH (need Node 20+)" >&2
+    echo "error: --with-node given but npm is not on PATH (need Node 24+)" >&2
     exit 1
   fi
   for dir in ui-tui web website; do

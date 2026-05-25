@@ -1,9 +1,9 @@
 {
   "name": "hermes-agent",
-  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "image": "mcr.microsoft.com/devcontainers/python:3.14",
   "features": {
     "ghcr.io/devcontainers/features/node:2": {
-      "version": "20"
+      "version": "24"
     }
   },
   "postCreateCommand": "bash scripts/cloud-setup.sh --with-node && npm install -g @anthropic-ai/claude-code@2.1.150",
