@@ -13,10 +13,8 @@ cerebras = ProviderProfile(
     auth_type="api_key",
     default_aux_model="llama-3.3-70b",
     fallback_models=(
-        "gpt-oss-120b",
         "llama-3.3-70b",
-        "llama-4-maverick-17b-128e-instruct",
-        "llama-4-scout-17b-16e-instruct",
+        "gpt-oss-120b",
     ),
 )
 

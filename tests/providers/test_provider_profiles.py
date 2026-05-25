@@ -71,6 +71,10 @@ class TestCerebrasProfile:
         assert p.default_aux_model == "llama-3.3-70b"
         assert p.default_aux_model in p.fallback_models
 
+    def test_fallback_models_curated(self):
+        p = get_provider_profile("cerebras")
+        assert p.fallback_models == ("llama-3.3-70b", "gpt-oss-120b")
+
     def test_no_special_request_quirks(self):
         p = get_provider_profile("cerebras")
         assert p.fixed_temperature is None

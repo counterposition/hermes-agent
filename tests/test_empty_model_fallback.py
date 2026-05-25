@@ -31,6 +31,12 @@ class TestGetDefaultModelForProvider:
         # Custom providers don't have entries in _PROVIDER_MODELS
         assert get_default_model_for_provider("some-random-custom") == ""
 
+    def test_cerebras_returns_first_catalog_model(self):
+        """Bundled provider must expose a default model so the empty-model
+        safety net (cli.py / gateway) never leaves model unset."""
+        from hermes_cli.models import get_default_model_for_provider
+        assert get_default_model_for_provider("cerebras") == "llama-3.3-70b"
+
 
 class TestGatewayEmptyModelFallback:
     """Test that _resolve_session_agent_runtime fills in empty model from provider catalog."""
