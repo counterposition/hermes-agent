@@ -35,7 +35,7 @@ def _wire(provider, base_url, model="m", rejected=()):
     # strict schemas: nothing, not even the must-echo pad (#45655, #70233)
     ("mistral", "https://api.mistral.ai/v1", "deepseek-r1", set()),
     ("custom", "https://api.groq.com/openai/v1", "m", set()),
-    ("custom", "https://api.cerebras.ai/v1", "m", set()),
+    ("custom", "https://api.cerebras.ai/v1", "m", {"reasoning"}),
     ("fireworks", "https://api.fireworks.ai/inference/v1", "m", {"reasoning_content"}),
     # OpenRouter-format gateways, incl. the Portal (#118182 does not reproduce)
     ("nous", "https://inference-api.nousresearch.com/v1", "z-ai/glm-5.3",
