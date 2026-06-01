@@ -108,6 +108,37 @@ class ProviderProfile:
             return urlparse(self.base_url).hostname or ""
         return ""
 
+    def project_assistant_replay(
+        self,
+        source_msg: dict[str, Any],
+        api_msg: dict[str, Any],
+        *,
+        model: str | None = None,
+    ) -> bool:
+        """Project stored assistant state into this provider's replay format.
+
+        Called while the agent builds a disposable wire copy, before internal
+        reasoning fields are removed.  Return ``True`` when the provider has
+        fully handled reasoning replay; the generic ``reasoning_content``
+        projection is then skipped.  The default leaves replay to the generic
+        path.
+        """
+        return False
+
+    def prepare_messages_for_model(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        model: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Model-aware adapter for provider message preprocessing.
+
+        The transport calls this method.  Delegating to the original one-arg
+        hook preserves compatibility with third-party profiles that override
+        ``prepare_messages(messages)``.
+        """
+        return self.prepare_messages(messages)
+
     def prepare_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Provider-specific message preprocessing.
 

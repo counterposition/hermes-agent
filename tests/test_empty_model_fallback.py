@@ -156,6 +156,12 @@ class TestDetectStaticProviderCostSafeDefault:
             assert result is not None
             assert result[1] == _PROVIDER_MODELS[provider][0]
 
+    def test_cerebras_returns_first_catalog_model(self):
+        """Bundled provider must expose a current default model so the
+        empty-model safety net (cli.py / gateway) never leaves model unset."""
+        from hermes_cli.models import get_default_model_for_provider
+        assert get_default_model_for_provider("cerebras") == "gpt-oss-120b"
+
 
 class TestGatewayEmptyModelFallback:
     """Test that _resolve_session_agent_runtime fills in empty model from provider catalog."""

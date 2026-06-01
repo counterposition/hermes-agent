@@ -3009,6 +3009,24 @@ def copy_reasoning_content_for_api(agent, source_msg: dict, api_msg: dict) -> No
     if source_msg.get("role") != "assistant":
         return
 
+    # Provider profiles may own a different replay representation.  Cerebras,
+    # for example, rejects ``reasoning_content`` but documents replay inside
+    # assistant ``content``.  Give the active profile first refusal while both
+    # the stored source and the disposable wire copy are available; this keeps
+    # provider-specific projection out of the generic conversation loop.
+    try:
+        from providers import get_provider_profile
+
+        profile = get_provider_profile(getattr(agent, "provider", ""))
+    except Exception:
+        profile = None
+    if profile is not None and profile.project_assistant_replay(
+        source_msg,
+        api_msg,
+        model=getattr(agent, "model", None),
+    ):
+        return
+
     needs_thinking_pad = agent._needs_thinking_reasoning_pad()
 
     # 1. Explicit reasoning_content already set.
