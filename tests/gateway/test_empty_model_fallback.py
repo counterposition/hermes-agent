@@ -8,6 +8,12 @@ from unittest.mock import patch
 
 
 
+def test_cerebras_returns_first_catalog_model():
+    """Bundled provider must expose a current default model so the
+    empty-model safety net (cli.py / gateway) never leaves model unset."""
+    from hermes_cli.models import _PROVIDER_MODELS, get_default_model_for_provider
+    assert get_default_model_for_provider("cerebras") == _PROVIDER_MODELS["cerebras"][0]
+
 
 class TestGatewayEmptyModelFallback:
     """Test that _resolve_session_agent_runtime fills in empty model from provider catalog."""
