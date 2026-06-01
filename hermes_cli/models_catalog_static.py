@@ -221,6 +221,7 @@ _ALIBABA_TOKEN_PLAN_MODELS = [
 ]
 # Curated per-provider lists. ``-cn`` twins share the international catalog on a domestic endpoint.
 _PROVIDER_MODELS: dict[str, list[str]] = _CuratedCatalog({
+    "cerebras": ["gpt-oss-120b", "qwen-3.8-27b"],
     "moa": ["default"],
     "nous": [mid for mid, _ in OPENROUTER_MODELS if mid not in _OPENROUTER_ONLY and not mid.endswith(":free")],
     # Used by /model counts and provider_model_ids fallback when /v1/models is unavailable.
