@@ -3985,10 +3985,23 @@ def intent_ack_continuation_enabled(agent) -> bool:
 def copy_reasoning_content_for_api(agent, source_msg: dict, api_msg: dict) -> None:
     """Copy provider-facing reasoning fields onto an API replay message.
 
-    Forwarder — the strip-vs-repad POLICY is owned by
-    ``agent.message_sanitization.apply_reasoning_content_policy`` (audit F4);
-    this only supplies the agent's cached provider-direction flag.
+    Provider profiles get first refusal for provider-specific replay formats.
+    Otherwise the strip-vs-repad policy remains centralized in
+    ``agent.message_sanitization.apply_reasoning_content_policy``.
     """
+    try:
+        from providers import get_provider_profile
+
+        profile = get_provider_profile(getattr(agent, "provider", ""))
+    except Exception:
+        profile = None
+    if profile is not None and profile.project_assistant_replay(
+        source_msg,
+        api_msg,
+        model=getattr(agent, "model", None),
+    ):
+        return
+
     from agent.message_sanitization import apply_reasoning_content_policy
 
     apply_reasoning_content_policy(

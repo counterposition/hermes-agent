@@ -467,6 +467,10 @@ _PROVIDER_MODELS: dict[str, list[str]] = {
         "deepseek-v4-pro",
         "deepseek-v4-flash",
     ],
+    "cerebras": [
+        "gpt-oss-120b",
+        "zai-glm-4.7",
+    ],
     "xiaomi": [
         "mimo-v2.5-pro",
         "mimo-v2.5",

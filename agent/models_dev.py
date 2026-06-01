@@ -207,6 +207,7 @@ PROVIDER_TO_MODELS_DEV: Dict[str, str] = {
     "meta-ai": "meta",
     "meta": "meta",
     "groq": "groq",
+    "cerebras": "cerebras",
     "mistral": "mistral",
     "togetherai": "togetherai",
     "perplexity": "perplexity",
