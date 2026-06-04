@@ -746,10 +746,10 @@ def _toolset_has_keys(
     return all(get_env_value(var) for var, _ in TOOLSET_ENV_REQUIREMENTS.get(ts_key, []))
 
 
-def _prompt_choice(question: str, choices: list, default: int = 0) -> int:
+def _prompt_choice(question: str, choices: list, default: int = 0, *, searchable: bool = False) -> int:
     """Single-select menu (arrow keys). Delegates to curses_radiolist."""
     from hermes_cli.curses_ui import curses_radiolist
-    return curses_radiolist(question, choices, selected=default, cancel_returns=default)
+    return curses_radiolist(question, choices, selected=default, cancel_returns=default, searchable=searchable)
 
 
 # --- Token Estimation ---
@@ -844,7 +844,7 @@ def _reconfigure_tool(config: dict, *, force_fresh: bool = True):
         _print_info("No configured tools to reconfigure.")
         return
     choices = [label for _, label in configurable] + ["Cancel"]
-    idx = _prompt_choice("  Which tool would you like to reconfigure?", choices, len(choices) - 1)
+    idx = _prompt_choice("  Which tool would you like to reconfigure?", choices, len(choices) - 1, searchable=True)
     if idx >= len(configurable):
         return
     _configure_toolset(configurable[idx][0], config, force_fresh=force_fresh, reconfigure=True)

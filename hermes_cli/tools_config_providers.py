@@ -300,7 +300,7 @@ def _configure_tool_category(ts_key: str, cat: dict, config: dict, *, force_fres
 
     default_idx = _detect_active_provider_index(providers, config, force_fresh=force_fresh)
     question = "  Select provider:" if reconfigure else f"  {title}:"
-    provider_idx = _prompt_choice(question, provider_choices, default_idx)
+    provider_idx = _prompt_choice(question, provider_choices, default_idx, searchable=True)
     if provider_idx >= len(providers):
         _print_info(f"  Skipped {name}")
         return
@@ -545,7 +545,7 @@ def _pick_model_from_catalog(
             row += "  ← currently in use"
         rows.append(row)
 
-    idx = _prompt_choice(f"  Choose {display} model:", rows, default=0)
+    idx = _prompt_choice(f"  Choose {display} model:", rows, default=0, searchable=True)
     chosen = ordered[idx]
     cur_cfg["model"] = chosen
     _print_success(f"  Model set to: {chosen}")

@@ -1435,7 +1435,7 @@ def _configure_category_spec(spec) -> bool:
         names.append(current)
         items.append(f"{current} (not found)")
     selected = max(i for i, name in enumerate(names) if name == current)
-    new_value = names[curses_radiolist(title=f"{title} (select one)", items=items, selected=selected)]
+    new_value = names[curses_radiolist(title=f"{title} (select one)", items=items, selected=selected, searchable=True)]
     if new_value == current:
         return False
     save(new_value)

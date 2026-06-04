@@ -252,17 +252,17 @@ def run_setup_action_with_navigation(
 # ── Prompt primitives ──
 
 
-def _curses_prompt_choice(question: str, choices: list, default: int = 0, description: str | None = None) -> int:
+def _curses_prompt_choice(question: str, choices: list, default: int = 0, description: str | None = None, *, searchable: bool = False) -> int:
     """Single-select menu using curses. Delegates to curses_radiolist."""
     from hermes_cli.curses_ui import curses_radiolist
-    return curses_radiolist(question, choices, selected=default, cancel_returns=-1, description=description)
+    return curses_radiolist(question, choices, selected=default, cancel_returns=-1, description=description, searchable=searchable)
 
 
-def prompt_choice(question: str, choices: list, default: int = 0, description: str | None = None) -> int:
+def prompt_choice(question: str, choices: list, default: int = 0, description: str | None = None, *, searchable: bool = False) -> int:
     """Prompt for a choice from a list with arrow key navigation. Escape cancels an active setup
     wizard; outside setup it keeps the default (the curses component owns its own numbered
     fallback, so a cancel result must never open another prompt). Ctrl+C exits the wizard."""
-    idx = _curses_prompt_choice(question, choices, default, description=description)
+    idx = _curses_prompt_choice(question, choices, default, description=description, searchable=searchable)
     if idx < 0:
         return default
     if idx == default:
