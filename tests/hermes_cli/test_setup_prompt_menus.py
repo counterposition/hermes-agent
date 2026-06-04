@@ -8,7 +8,7 @@ def test_prompt_choice_escape_keeps_default_without_numbered_fallback(monkeypatc
     monkeypatch.setattr(
         setup_mod,
         "_curses_prompt_choice",
-        lambda question, choices, default=0, description=None: -1,
+        lambda question, choices, default=0, description=None, searchable=False: -1,
     )
     monkeypatch.setattr(
         "builtins.input",
