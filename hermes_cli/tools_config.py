@@ -2144,10 +2144,16 @@ def _toolset_has_keys(
 
 # ─── Menu Helpers ─────────────────────────────────────────────────────────────
 
-def _prompt_choice(question: str, choices: list, default: int = 0) -> int:
+def _prompt_choice(question: str, choices: list, default: int = 0, *, searchable: bool = False) -> int:
     """Single-select menu (arrow keys). Delegates to curses_radiolist."""
     from hermes_cli.curses_ui import curses_radiolist
-    return curses_radiolist(question, choices, selected=default, cancel_returns=default)
+    return curses_radiolist(
+        question,
+        choices,
+        selected=default,
+        cancel_returns=default,
+        searchable=searchable,
+    )
 
 
 # ─── Token Estimation ────────────────────────────────────────────────────────
@@ -2997,7 +3003,7 @@ def _configure_tool_category(
             force_fresh=force_fresh,
         )
 
-        provider_idx = _prompt_choice(f"  {title}:", provider_choices, default_idx)
+        provider_idx = _prompt_choice(f"  {title}:", provider_choices, default_idx, searchable=True)
 
         # Skip selected
         if provider_idx >= len(providers):
@@ -3192,6 +3198,7 @@ def _configure_imagegen_model(backend_name: str, config: dict) -> None:
         f"  Choose {backend['display']} model:",
         rows,
         default=0,
+        searchable=True,
     )
 
     chosen = ordered[idx]
@@ -3274,6 +3281,7 @@ def _configure_imagegen_model_for_plugin(plugin_name: str, config: dict) -> None
         f"  Choose {plugin_name} model:",
         rows,
         default=0,
+        searchable=True,
     )
 
     chosen = ordered[idx]
@@ -3419,6 +3427,7 @@ def _configure_videogen_model_for_plugin(plugin_name: str, config: dict) -> None
         f"  Choose {plugin_name} model:",
         rows,
         default=0,
+        searchable=True,
     )
 
     chosen = ordered[idx]
@@ -3919,7 +3928,7 @@ def _reconfigure_tool(
     choices = [label for _, label in configurable]
     choices.append("Cancel")
 
-    idx = _prompt_choice("  Which tool would you like to reconfigure?", choices, len(choices) - 1)
+    idx = _prompt_choice("  Which tool would you like to reconfigure?", choices, len(choices) - 1, searchable=True)
 
     if idx >= len(configurable):
         return  # Cancel
@@ -4017,7 +4026,7 @@ def _configure_tool_category_for_reconfig(
             force_fresh=force_fresh,
         )
 
-        provider_idx = _prompt_choice("  Select provider:", provider_choices, default_idx)
+        provider_idx = _prompt_choice("  Select provider:", provider_choices, default_idx, searchable=True)
         _reconfigure_provider(
             providers[provider_idx],
             config,

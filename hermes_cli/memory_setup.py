@@ -44,7 +44,13 @@ def _curses_select(
         f"{label} - {desc}" if desc else label
         for label, desc in items
     ]
-    result = curses_radiolist(title, display_items, selected=default, cancel_returns=cancel_returns)
+    result = curses_radiolist(
+        title,
+        display_items,
+        selected=default,
+        cancel_returns=cancel_returns,
+        searchable=True,
+    )
     _clear_interactive_transition()
     return result
 

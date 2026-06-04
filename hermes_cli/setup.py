@@ -228,20 +228,33 @@ def _sanitize_pasted_input(value: str) -> str:
     return _BRACKETED_PASTE_PATTERN.sub("", value)
 
 
-def _curses_prompt_choice(question: str, choices: list, default: int = 0, description: str | None = None) -> int:
+def _curses_prompt_choice(question: str, choices: list, default: int = 0, description: str | None = None, *, searchable: bool = False) -> int:
     """Single-select menu using curses. Delegates to curses_radiolist."""
     from hermes_cli.curses_ui import curses_radiolist
-    return curses_radiolist(question, choices, selected=default, cancel_returns=-1, description=description)
+    return curses_radiolist(question, choices, selected=default, cancel_returns=-1, description=description, searchable=searchable)
 
 
 
-def prompt_choice(question: str, choices: list, default: int = 0, description: str | None = None) -> int:
+def prompt_choice(
+    question: str,
+    choices: list,
+    default: int = 0,
+    description: str | None = None,
+    *,
+    searchable: bool = False,
+) -> int:
     """Prompt for a choice from a list with arrow key navigation.
 
     Escape keeps the current default (skips the question).
     Ctrl+C exits the wizard.
     """
-    idx = _curses_prompt_choice(question, choices, default, description=description)
+    idx = _curses_prompt_choice(
+        question,
+        choices,
+        default,
+        description=description,
+        searchable=searchable,
+    )
     if idx >= 0:
         if idx == default:
             print_info("  Skipped (keeping current)")
@@ -335,7 +348,11 @@ def prompt_yes_no(question: str, default: bool = True) -> bool:
         print_error("Please enter 'y' or 'n'")
 
 
-def prompt_checklist(title: str, items: list, pre_selected: list = None) -> list:
+def prompt_checklist(
+    title: str,
+    items: list,
+    pre_selected: list = None,
+) -> list:
     """
     Display a multi-select checklist and return the indices of selected items.
 
