@@ -203,7 +203,7 @@ def cmd_fallback_remove(args) -> None:  # noqa: ARG001
 
     # The curses menu owns its own non-TTY guard and numbered fallback; -1 means cancelled.
     from hermes_cli.setup import _curses_prompt_choice
-    idx = _curses_prompt_choice("Select a fallback to remove:", [_format_entry(e) for e in chain] + ["Cancel"], 0)
+    idx = _curses_prompt_choice("Select a fallback to remove:", [_format_entry(e) for e in chain] + ["Cancel"], 0, searchable=True)
     if idx is None or idx < 0 or idx >= len(chain):
         print("\n  Cancelled — no change.")
         return
