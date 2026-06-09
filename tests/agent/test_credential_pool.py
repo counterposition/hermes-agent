@@ -578,6 +578,20 @@ def test_load_pool_seeds_env_api_key(tmp_path, monkeypatch):
     assert entry.access_token == "sk-or-seeded"
 
 
+def test_load_pool_seeds_openrouter_base_url(tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-seeded")
+    monkeypatch.setenv("OPENROUTER_BASE_URL", "https://aperture.example/v1")
+    _write_auth_store(tmp_path, {"version": 1, "providers": {}})
+
+    from agent.credential_pool import load_pool
+
+    entry = load_pool("openrouter").select()
+
+    assert entry is not None
+    assert entry.base_url == "https://aperture.example/v1"
+
+
 
 def test_load_pool_does_not_persist_env_seeded_secret_value(tmp_path, monkeypatch):
     """Runtime env keys may be used in memory but must not land in auth.json."""
