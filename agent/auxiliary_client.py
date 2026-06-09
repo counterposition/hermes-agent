@@ -3374,8 +3374,12 @@ def _try_openrouter(explicit_api_key: str = None, model: str = None) -> Tuple[Op
     if not or_key:
         _mark_provider_unhealthy("openrouter", ttl=60)
         return None, None
+    base_url = (
+        (_scoped_key_env("OPENROUTER_BASE_URL") or "").strip().rstrip("/")
+        or OPENROUTER_BASE_URL
+    )
     logger.debug("Auxiliary client: OpenRouter")
-    return _create_openai_client(api_key=or_key, base_url=OPENROUTER_BASE_URL,
+    return _create_openai_client(api_key=or_key, base_url=base_url,
                    default_headers=build_or_headers()), or_model
 
 
