@@ -2329,9 +2329,10 @@ def _try_openrouter(explicit_api_key: Optional[Union[str, Callable[[], str]]] = 
         _mark_provider_unhealthy(
             "openrouter", ttl=60, reason=_describe_openrouter_unavailable(or_model), level=logging.DEBUG)
         return None, None
+    base_url = (_scoped_key_env("OPENROUTER_BASE_URL") or "").strip().rstrip("/") or OPENROUTER_BASE_URL
     logger.debug("Auxiliary client: OpenRouter")
     return _create_openai_client(
-        api_key=or_key, base_url=override_url or OPENROUTER_BASE_URL, default_headers=build_or_headers()
+        api_key=or_key, base_url=override_url or base_url, default_headers=build_or_headers()
     ), or_model
 
 
