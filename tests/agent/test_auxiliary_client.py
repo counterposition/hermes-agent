@@ -5277,6 +5277,26 @@ class TestOpenRouterExplicitApiKey:
                 f"Expected env fallback key to be used when explicit_api_key is None, got: {call_kwargs['api_key']}"
             )
 
+    def test_resolve_provider_client_uses_openrouter_base_url_override(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("OPENROUTER_API_KEY", "env-fallback-key")
+        monkeypatch.setenv("OPENROUTER_BASE_URL", "https://aperture.example/v1")
+
+        mock_openai = MagicMock()
+        mock_openai.return_value = MagicMock(name="openrouter-client")
+
+        with patch("agent.auxiliary_client.OpenAI", mock_openai):
+            client, _ = resolve_provider_client(
+                provider="openrouter",
+                explicit_api_key=None,
+            )
+
+            assert client is not None
+            mock_openai.assert_called_once()
+            call_kwargs = mock_openai.call_args[1]
+            assert call_kwargs["base_url"] == "https://aperture.example/v1"
+
 
 def test_pool_runtime_base_url_uses_nous_env_override(monkeypatch):
     entry = SimpleNamespace(

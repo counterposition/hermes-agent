@@ -2415,6 +2415,10 @@ def _seed_from_env(provider: str, entries: List[PooledCredential]) -> Tuple[bool
         # Prefer ~/.hermes/.env over os.environ
         token = _get_env_prefer_dotenv("OPENROUTER_API_KEY")
         if token:
+            base_url = (
+                _get_env_prefer_dotenv("OPENROUTER_BASE_URL").strip().rstrip("/")
+                or OPENROUTER_BASE_URL
+            )
             source = "env:OPENROUTER_API_KEY"
             if _is_source_suppressed(provider, source):
                 return changed, active_sources
@@ -2427,7 +2431,7 @@ def _seed_from_env(provider: str, entries: List[PooledCredential]) -> Tuple[bool
                     source=source,
                     env_var="OPENROUTER_API_KEY",
                     token=token,
-                    base_url=OPENROUTER_BASE_URL,
+                    base_url=base_url,
                 ),
             )
         return changed, active_sources

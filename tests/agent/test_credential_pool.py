@@ -2120,6 +2120,22 @@ def test_custom_pool_does_not_break_existing_providers(tmp_path, monkeypatch):
     assert entry.access_token == "sk-or-test"
 
 
+def test_openrouter_pool_seeds_configured_base_url(tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.setenv("OPENROUTER_BASE_URL", "https://aperture.example/v1")
+    _write_auth_store(tmp_path, {"version": 1, "providers": {}})
+
+    from agent.credential_pool import load_pool
+
+    pool = load_pool("openrouter")
+    entry = pool.select()
+
+    assert entry is not None
+    assert entry.source == "env:OPENROUTER_API_KEY"
+    assert entry.base_url == "https://aperture.example/v1"
+
+
 def test_get_custom_provider_pool_key(tmp_path, monkeypatch):
     """get_custom_provider_pool_key maps base_url to custom:<name> pool key."""
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
