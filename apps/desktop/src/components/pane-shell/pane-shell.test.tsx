@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { useEffect } from 'react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { $paneStates, setPaneOpen, setPaneWidthOverride } from '@/store/panes'
 
@@ -34,6 +35,14 @@ function mockWidth(element: HTMLElement, width: number) {
       toJSON: () => ({})
     })
   })
+}
+
+function EffectProbe({ onMount }: { onMount: () => void }) {
+  useEffect(() => {
+    onMount()
+  }, [onMount])
+
+  return <span data-testid="pane-effect-child">child</span>
 }
 
 describe('PaneShell composition', () => {
@@ -144,6 +153,30 @@ describe('PaneShell composition', () => {
       </PaneShell>
     )
 
+    expect($paneStates.get().files?.open).toBe(true)
+  })
+
+  it('does not mount disabled pane children', () => {
+    const onMount = vi.fn()
+
+    setPaneOpen('files', true)
+
+    const rendered = render(
+      <PaneShell>
+        <Pane disabled={true} id="files" side="left" width="240px">
+          <EffectProbe onMount={onMount} />
+        </Pane>
+        <PaneMain>main</PaneMain>
+      </PaneShell>
+    )
+
+    const pane = rendered.container.querySelector('[data-pane-id="files"]')
+
+    expect(getColumnTemplate(gridContainer(rendered))).toEqual(['0px', 'minmax(0,1fr)'])
+    expect(pane).toBeInstanceOf(HTMLElement)
+    expect((pane as HTMLElement).getAttribute('aria-hidden')).toBe('true')
+    expect(rendered.queryByTestId('pane-effect-child')).toBeNull()
+    expect(onMount).not.toHaveBeenCalled()
     expect($paneStates.get().files?.open).toBe(true)
   })
 

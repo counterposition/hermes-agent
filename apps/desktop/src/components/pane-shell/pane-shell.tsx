@@ -566,7 +566,7 @@ export function Pane({
           />
         </div>
       )}
-      {children}
+      {!disabled && children}
     </div>
   )
 }
