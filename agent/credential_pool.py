@@ -2577,9 +2577,10 @@ def _seed_from_env(provider: str, entries: List[PooledCredential]) -> Tuple[bool
 
     if provider == "openrouter":
         token = get_env_prefer_dotenv("OPENROUTER_API_KEY")
+        base_url = get_env_prefer_dotenv("OPENROUTER_BASE_URL").strip().rstrip("/") or OPENROUTER_BASE_URL
         if token and seed.upsert(
             "env:OPENROUTER_API_KEY",
-            _env_payload(env_var="OPENROUTER_API_KEY", token=token, base_url=OPENROUTER_BASE_URL),
+            _env_payload(env_var="OPENROUTER_API_KEY", token=token, base_url=base_url),
         ):
             _warn_env_ingestion_once(provider, "OPENROUTER_API_KEY")
         return seed.result
