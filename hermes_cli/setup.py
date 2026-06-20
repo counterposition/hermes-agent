@@ -3040,7 +3040,8 @@ def _blank_slate_minimal_toolsets(config: dict):
     config.setdefault("platform_toolsets", {})["cli"] = sorted(keep)
 
     try:
-        from toolsets import TOOLSETS
+        from toolsets import TOOLSETS, resolve_toolset
+
         from hermes_cli.tools_config import CONFIGURABLE_TOOLSETS, _get_plugin_toolset_keys
 
         all_keys = set()
@@ -3061,7 +3062,20 @@ def _blank_slate_minimal_toolsets(config: dict):
                 # minimal Blank Slate surface (#57315).
             all_keys.add(k)
 
-        disabled = sorted(all_keys - keep)
+        # disabled_toolsets is applied at *tool* granularity, and a single tool
+        # can belong to several toolsets. Never disable a bundle that shares a
+        # tool with a kept toolset — doing so silently strips that tool from the
+        # blank slate. This generalizes the posture skip above and covers
+        # read-only overlap bundles like ``repo-read`` (read_file/search_files,
+        # both in the kept ``file`` toolset) (#57315, #58281).
+        kept_tools = set()
+        for ts in keep:
+            kept_tools.update(resolve_toolset(ts))
+
+        disabled = sorted(
+            k for k in (all_keys - keep)
+            if not (set(resolve_toolset(k)) & kept_tools)
+        )
         if disabled:
             config.setdefault("agent", {})["disabled_toolsets"] = disabled
     except Exception as exc:

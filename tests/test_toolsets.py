@@ -55,6 +55,14 @@ class TestResolveToolset:
         tools = resolve_toolset("web")
         assert set(tools) == {"web_search", "web_extract"}
 
+    def test_repo_read_toolset_is_read_only_file_access(self):
+        assert resolve_toolset("repo-read") == ["read_file", "search_files"]
+
+    def test_repo_read_toolset_is_available_to_delegate_task(self):
+        from tools.delegate_tool import _SUBAGENT_TOOLSETS
+
+        assert "repo-read" in _SUBAGENT_TOOLSETS
+
     def test_composite_toolset(self):
         tools = resolve_toolset("debugging")
         assert "terminal" in tools
