@@ -59,9 +59,13 @@ class TestResolveToolset:
         assert resolve_toolset("repo-read") == ["read_file", "search_files"]
 
     def test_repo_read_toolset_is_available_to_delegate_task(self):
-        from tools.delegate_tool import _SUBAGENT_TOOLSETS
+        # Subagents no longer select toolsets themselves (#56386) — they
+        # always inherit whatever the parent has enabled. "Available to
+        # delegate_task" now means: repo-read survives the blocked-tools
+        # strip applied to the parent's toolsets before inheritance.
+        from tools.delegate_tool import _strip_blocked_tools
 
-        assert "repo-read" in _SUBAGENT_TOOLSETS
+        assert "repo-read" in _strip_blocked_tools(["repo-read"])
 
     def test_composite_toolset(self):
         tools = resolve_toolset("debugging")
