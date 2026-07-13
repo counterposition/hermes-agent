@@ -4,11 +4,14 @@ import {
   DEFAULT_VOICE_RECORD_KEY,
   formatVoiceRecordKey,
   isActionMod,
+  isBareCtrl,
   isCopyShortcut,
+  isExplicitActionMod,
   isMac,
   isMacActionFallback,
   isVoiceToggleKey,
-  parseVoiceRecordKey
+  parseVoiceRecordKey,
+  shouldSwallowActionChordText
 } from '../lib/platform.js'
 
 // These cover the non-macOS (host-native on the Linux CI lane) arms. The
@@ -20,6 +23,33 @@ describeHost('platform action modifier', () => {
   it('still uses Ctrl as the action modifier on non-macOS', () => {
     expect(isActionMod({ ctrl: true, meta: false, super: false })).toBe(true)
     expect(isActionMod({ ctrl: false, meta: false, super: true })).toBe(false)
+  })
+
+  it('uses Ctrl as the explicit action modifier on non-macOS', () => {
+    expect(isExplicitActionMod({ ctrl: true, meta: false, super: false })).toBe(true)
+  })
+
+  it('classifies bare-Ctrl chords consistently for readline arbitration', () => {
+    expect(isBareCtrl({ ctrl: true, meta: false })).toBe(true)
+    expect(isBareCtrl({ ctrl: true, meta: false, shift: true })).toBe(false)
+    expect(isBareCtrl({ ctrl: true, meta: false, alt: true })).toBe(false)
+    expect(isBareCtrl({ ctrl: true, meta: true })).toBe(false)
+    expect(isBareCtrl({ ctrl: true, meta: false, super: true })).toBe(false)
+    expect(isBareCtrl({ ctrl: false, meta: false })).toBe(false)
+  })
+
+  it('swallows unowned Ctrl+D/L shapes in the composer on non-macOS', () => {
+    // Ctrl+L: the global handler owns redraw; the composer must not insert 'l'.
+    expect(shouldSwallowActionChordText({ ctrl: true, meta: false }, 'l')).toBe(true)
+    // Non-bare Ctrl+D (CSI-u Ctrl+Shift+D / Ctrl+Alt+D): neither exit nor
+    // readline delete-char — consume instead of inserting a literal 'd'.
+    expect(shouldSwallowActionChordText({ ctrl: true, meta: false, shift: true }, 'd')).toBe(true)
+    expect(shouldSwallowActionChordText({ ctrl: true, meta: false, alt: true }, 'd')).toBe(true)
+    // Bare Ctrl+D stays with the readline delete-char path.
+    expect(shouldSwallowActionChordText({ ctrl: true, meta: false }, 'd')).toBe(false)
+    // Ordinary typing and other chords fall through untouched.
+    expect(shouldSwallowActionChordText({ ctrl: false, meta: false }, 'd')).toBe(false)
+    expect(shouldSwallowActionChordText({ ctrl: true, meta: false }, 'f')).toBe(false)
   })
 })
 
