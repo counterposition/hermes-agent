@@ -23,6 +23,7 @@ from hermes_constants import (
     is_container,
     node_tool_runnable,
     parse_reasoning_effort,
+    reasoning_effort_label,
     reset_hermes_home_override,
     secure_parent_dir,
     set_hermes_home_override,
@@ -1152,3 +1153,35 @@ class TestHealAttemptFlagSemantics:
         # The flag is set, so the once-per-process budget is spent.
         assert heal_hermes_managed_node() is False
         assert calls["n"] == 1
+
+
+@pytest.mark.parametrize(
+    ("reasoning_config", "expected"),
+    [
+        # Unset / malformed -> blank: no explicit session-level effort is
+        # configured, so no label (a default "medium" would be misleading).
+        (None, ""),
+        ({}, ""),
+        ("high", ""),
+        ({"enabled": True, "effort": "bogus"}, ""),
+        ({"enabled": True, "effort": ""}, ""),
+        # Disabled -> "none", even with a stale effort left in the dict.
+        ({"enabled": False}, "none"),
+        ({"enabled": False, "effort": "high"}, "none"),
+        # Explicit efforts pass through, including "medium".
+        ({"enabled": True, "effort": "medium"}, "medium"),
+        ({"effort": "low"}, "low"),
+    ],
+)
+def test_reasoning_effort_label(reasoning_config, expected):
+    assert reasoning_effort_label(reasoning_config) == expected
+
+
+def test_reasoning_effort_label_round_trips_every_parseable_effort():
+    """Invariant: whatever parse_reasoning_effort accepts, the label shows
+    verbatim ("none" for disabled, "" for unset) — no drift between the two
+    helpers as effort levels are added."""
+    for effort in VALID_REASONING_EFFORTS:
+        assert reasoning_effort_label(parse_reasoning_effort(effort)) == effort
+    assert reasoning_effort_label(parse_reasoning_effort("none")) == "none"
+    assert reasoning_effort_label(parse_reasoning_effort("")) == ""

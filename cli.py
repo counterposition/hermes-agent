@@ -6477,6 +6477,12 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             return "class:status-bar-warn"
         return "class:status-bar-dim"
 
+    def _reasoning_effort_label(self) -> str:
+        """Return a short label for the active reasoning effort level."""
+        from hermes_constants import reasoning_effort_label
+
+        return reasoning_effort_label(getattr(self, "reasoning_config", None))
+
     def _build_context_bar(self, percent_used: Optional[int], width: int = 10) -> str:
         safe_percent = max(0, min(100, percent_used or 0))
         filled = round((safe_percent / 100) * width)
@@ -6560,6 +6566,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         snapshot = {
             "model_name": model_name,
             "model_short": model_short,
+            "reasoning_label": self._reasoning_effort_label(),
             "duration": format_duration_compact(elapsed_seconds),
             "session_title": self._get_status_bar_session_title(),
             "prompt_elapsed": self._format_prompt_elapsed(
@@ -7558,6 +7565,11 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             def _ok(name: str) -> bool:
                 return field_set is None or name in field_set
 
+            reasoning_label = snapshot.get("reasoning_label") or ""
+            model_label = snapshot["model_short"]
+            if reasoning_label:
+                model_label = f"{model_label} ({reasoning_label})"
+
             if not _ok("title"):
                 session_title = ""
 
@@ -7582,7 +7594,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             if width < 76:
                 parts = []
                 if _ok("model"):
-                    parts.append(f"⚕ {snapshot['model_short']}")
+                    parts.append(f"⚕ {model_label}")
                 if _ok("context_pct"):
                     parts.append(percent_label)
                 cache = self._cache_hit_rate(snapshot, precision=0)
@@ -7616,7 +7628,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
 
             parts = []
             if _ok("model"):
-                parts.append(f"⚕ {snapshot['model_short']}")
+                parts.append(f"⚕ {model_label}")
             if _ok("context_detail"):
                 if snapshot["context_length"]:
                     ctx_total = _format_context_length(snapshot["context_length"])
@@ -7698,6 +7710,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             def _ok(name: str) -> bool:
                 return field_set is None or name in field_set
 
+            reasoning_label = snapshot.get("reasoning_label") or ""
+
             if not _ok("title"):
                 session_title = ""
 
@@ -7742,6 +7756,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     if _ok("model"):
                         frags.append(("class:status-bar", " ⚕ "))
                         frags.append(("class:status-bar-strong", snapshot["model_short"]))
+                        if reasoning_label:
+                            frags.append(("class:status-bar-dim", f" ({reasoning_label})"))
                     if _ok("context_pct"):
                         _append(frags, " · ", (self._status_bar_context_style(percent), percent_label))
                     cache = self._cache_hit_rate(snapshot, precision=0)
@@ -7779,6 +7795,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     if _ok("model"):
                         frags.append(("class:status-bar", " ⚕ "))
                         frags.append(("class:status-bar-strong", snapshot["model_short"]))
+                        if reasoning_label:
+                            frags.append(("class:status-bar-dim", f" ({reasoning_label})"))
                     if _ok("context_detail"):
                         if snapshot["context_length"]:
                             ctx_total = _format_context_length(snapshot["context_length"])
