@@ -6,6 +6,7 @@ import {
   applyVoiceRecordResponse,
   composerHasDraft,
   dismissSensitivePrompt,
+  getExplicitExitChordAction,
   handleIdleHotkeyExit,
   resolveCtrlCComposerAction,
   resolveDoubleEscAction,
@@ -141,6 +142,37 @@ describe('handleIdleHotkeyExit', () => {
     expect(actions.die).not.toHaveBeenCalled()
     expect(requestDashboardNewSession).toHaveBeenCalledTimes(1)
     expect(actions.sys).toHaveBeenCalled()
+  })
+})
+
+const key = (overrides: Record<string, unknown> = {}) =>
+  ({ ctrl: false, meta: false, super: false, ...overrides }) as any
+
+describe('getExplicitExitChordAction', () => {
+  it('lets bare Ctrl+D exit only from an empty composer on every platform (#116443)', () => {
+    for (const mac of [false, true]) {
+      expect(getExplicitExitChordAction(key({ ctrl: true }), 'd', false, mac)).toBe('exit')
+      expect(getExplicitExitChordAction(key({ ctrl: true }), 'd', true, mac)).toBe('composer')
+    }
+  })
+
+  it('accepts explicit Cmd/Super on macOS only, never Option/meta', () => {
+    expect(getExplicitExitChordAction(key({ super: true }), 'd', false, true)).toBe('exit')
+    expect(getExplicitExitChordAction(key({ super: true }), 'd', true, true)).toBe('composer')
+    expect(getExplicitExitChordAction(key({ meta: true }), 'd', false, true)).toBeNull()
+    expect(getExplicitExitChordAction(key({ super: true }), 'd', false, false)).toBeNull()
+  })
+
+  it('requires the same bare Ctrl+D shape the composer readline path owns', () => {
+    // CSI-u Ctrl+Shift+D / Ctrl+Alt+D are neither exit nor delete-char; the
+    // composer swallows them, so the global handler must not claim them either.
+    expect(getExplicitExitChordAction(key({ ctrl: true, shift: true }), 'd', false, false)).toBeNull()
+    expect(getExplicitExitChordAction(key({ ctrl: true, alt: true }), 'd', false, false)).toBeNull()
+    expect(getExplicitExitChordAction(key({ ctrl: true, meta: true }), 'd', false, false)).toBeNull()
+  })
+
+  it('ignores unrelated explicit action chords', () => {
+    expect(getExplicitExitChordAction(key({ ctrl: true }), 'l', false, false)).toBeNull()
   })
 })
 
