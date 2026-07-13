@@ -181,6 +181,12 @@ class ResponsesApiTransport(ProviderTransport):
         if "gpt-5.6" in (model or "").lower():
             # Ultra is the Codex product tier; the Responses API wire value is max.
             _effort_clamp["ultra"] = "max"
+        else:
+            # Fork: non-gpt-5.6 Codex/Responses rejects `ultra` (a gpt-5.6
+            # multi-agent product mode, not a reasoning_effort wire value) with a
+            # 400; clamp it to xhigh. `max` is NOT clamped — upstream treats it
+            # as a valid non-5.6 Responses wire value and passes it through.
+            _effort_clamp["ultra"] = "xhigh"
         if params.get("is_xai_responses", False):
             # xAI Responses tops out at high; keep generic stronger values usable.
             _effort_clamp.update({"xhigh": "high", "max": "high", "ultra": "high"})

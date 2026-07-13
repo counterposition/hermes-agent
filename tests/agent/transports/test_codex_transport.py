@@ -743,6 +743,19 @@ class TestCodexBuildKwargs:
         )
         assert "reasoning" not in kw
 
+    def test_ultra_effort_clamped_to_xhigh_on_non_gpt56(self, transport):
+        # "ultra" is a gpt-5.6 multi-agent product mode, not a reasoning_effort
+        # wire value. On non-5.6 Responses models it must clamp to xhigh, not
+        # leak the literal "ultra" string (which the API rejects with a 400).
+        # `max` is NOT clamped here — upstream passes it through (see
+        # test_run_agent_codex_responses::..._preserves_supported_efforts).
+        messages = [{"role": "user", "content": "Hi"}]
+        kw = transport.build_kwargs(
+            model="gpt-5.4", messages=messages, tools=[],
+            reasoning_config={"effort": "ultra"},
+        )
+        assert kw.get("reasoning", {}).get("effort") == "xhigh"
+
 
 class TestCodexValidateResponse:
 

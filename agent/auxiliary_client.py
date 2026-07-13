@@ -997,9 +997,15 @@ class _CodexCompletionsAdapter:
                     # with a 400.
                     effort = reasoning_cfg.get("effort") or "medium"
                     # Codex backend rejects "minimal"; clamp to "low" to
-                    # match the main-agent Codex transport behavior.
+                    # match the main-agent Codex transport behavior.  "ultra" is
+                    # a gpt-5.6 product mode, not a valid Codex reasoning_effort
+                    # wire value here; clamp it to "xhigh" (mirrors
+                    # agent/transports/codex.py _effort_clamp). "max" passes
+                    # through — upstream accepts it on non-5.6 Responses.
                     if effort == "minimal":
                         effort = "low"
+                    elif effort == "ultra":
+                        effort = "xhigh"
                     resp_kwargs["reasoning"] = {
                         "effort": effort,
                         "summary": "auto",
