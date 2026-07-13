@@ -146,6 +146,11 @@ class CLIStatusBarMixin:
     def _compression_count_style(count: int) -> str:
         return _threshold_style(count, ((10, "bad"), (5, "warn")), "dim")
 
+    def _reasoning_effort_label(self) -> str:
+        """Display the explicit session reasoning setting."""
+        from hermes_constants import reasoning_effort_label
+        return reasoning_effort_label(getattr(self, "reasoning_config", None))
+
     def _build_context_bar(self, percent_used: Optional[int], width: int = 10) -> str:
         safe_percent = max(0, min(100, percent_used or 0))
         filled = round((safe_percent / 100) * width)
@@ -210,6 +215,7 @@ class CLIStatusBarMixin:
         snapshot = {
             "model_name": model_name,
             "model_short": model_short,
+            "reasoning_label": self._reasoning_effort_label(),
             "duration": format_duration_compact(elapsed_seconds),
             "session_title": self._get_status_bar_session_title(),
             "prompt_elapsed": self._format_prompt_elapsed(
@@ -1035,6 +1041,9 @@ class CLIStatusBarMixin:
                 segs.append([(_SB, " ☤ "), (_STRONG, model_short)])
             else:
                 segs.append([("", f"☤ {model_short}")])
+            reasoning_label = snapshot.get("reasoning_label") or ""
+            if width >= 52 and reasoning_label:
+                segs[-1].append((_DIM if styled else "", f" ({reasoning_label})"))
         narrow, wide = width < 52, width >= 76
         if narrow:
             # Narrow bars put duration ahead of the goal segment; the other tiers reverse it.
