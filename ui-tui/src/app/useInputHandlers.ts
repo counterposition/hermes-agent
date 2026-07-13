@@ -7,7 +7,7 @@ import { DOUBLE_ESC_MS, TYPING_IDLE_MS } from '../config/timing.js'
 import { applyCompletion } from '../domain/slash.js'
 import type { ConfigSetResponse, VoiceRecordResponse } from '../gatewayTypes.js'
 import { t } from '../i18n/runtime.js'
-import { isAction, isCopyShortcut, isMac, isMacActionFallback, isVoiceToggleKey } from '../lib/platform.js'
+import { type ChordKey, isAction, isBareCtrl, isCopyShortcut, isExplicitAction, isMac, isVoiceToggleKey } from '../lib/platform.js'
 import { computePrecisionWheelStep, initPrecisionWheel } from '../lib/precisionWheel.js'
 import { computeWheelStep, initWheelAccelForHost } from '../lib/wheelAccel.js'
 import { closeWidget, dispatchWidgetInput } from '../sdk/host.js'
@@ -143,6 +143,35 @@ export function shouldFallThroughForScroll(key: {
   }
 
   return false
+}
+
+export type ExplicitExitChordAction = 'composer' | 'exit'
+
+export function getExplicitExitChordAction(
+  key: ChordKey,
+  ch: string,
+  composerHasDraft: boolean,
+  mac = isMac
+): ExplicitExitChordAction | null {
+  if (ch.toLowerCase() !== 'd') {
+    return null
+  }
+
+  // Bare Ctrl+D is the terminal EOF convention on every platform (Ghostty takes
+  // Cmd+D for split panes, so Cmd is no substitute on macOS); macOS also accepts
+  // explicit Cmd via key.super, never the ambiguous Option/meta form. Bare Ctrl is
+  // the same shape the composer's readline delete-char keys off, so global
+  // arbitration and composer editing can never disagree about who owns a
+  // Ctrl+D-family event (Ctrl+Shift+D and Ctrl+Alt+D from CSI-u terminals are
+  // neither exit nor delete-char).
+  if (!isBareCtrl(key) && !(mac && key.super === true)) {
+    return null
+  }
+
+  // Exit only from an empty composer (#116443). While a draft exists the
+  // composer owns the chord: readline delete-char for Ctrl+D, a swallowed
+  // no-op for Cmd+D.
+  return composerHasDraft ? 'composer' : 'exit'
 }
 
 export function applyVoiceRecordResponse(
@@ -765,9 +794,21 @@ export function useInputHandlers(ctx: InputHandlerContext): InputHandlerResult {
       })
     }
 
-    // Ctrl+D is the terminal EOF convention: exit only from an empty composer, on every
-    // platform (macOS's action modifier is Cmd, which Ghostty consumes for split panes).
-    if ((isAction(key, ch, 'd') || isMacActionFallback(key, ch, 'd')) && !composerHasDraft(cState)) {
+    // Any draft (text, staged multi-line ``inputBuf``, attachments) blocks exit,
+    // mirroring the Ctrl+C ladder above: Ctrl+D must not throw it away. Deleting
+    // is a no-op when the editable line is empty; clear the draft with Ctrl+C
+    // before exiting.
+    const exitChordAction = getExplicitExitChordAction(key, ch, composerHasDraft(cState))
+
+    if (exitChordAction) {
+      if (exitChordAction !== 'exit') {
+        // Composer owns the chord (readline delete-char while it has text).
+        return undefined
+      }
+
+      // Preserve upstream's dashboard-mode behavior: an explicit exit chord
+      // should start a new session in the embedded dashboard TUI rather than
+      // killing the process, and only call die() outside dashboard mode.
       return handleIdleHotkeyExit(actions, DASHBOARD_TUI_MODE, () => {
         gateway.gw.publishLocalEvent({
           payload: { reason: 'idle_exit_hotkey' },
@@ -777,7 +818,11 @@ export function useInputHandlers(ctx: InputHandlerContext): InputHandlerResult {
       })
     }
 
-    if (isAction(key, ch, 'l')) {
+    // Explicit clear chord (Cmd+L on macOS, Ctrl+L elsewhere) plus readline
+    // Ctrl+L on macOS, where bare Ctrl is not the action modifier. The
+    // composer swallows every Ctrl/action+L shape (shouldSwallowActionChordText)
+    // so redraw stays non-destructive to the draft.
+    if (isExplicitAction(key, ch, 'l') || (isBareCtrl(key) && ch.toLowerCase() === 'l')) {
       clearSelection()
       forceRedraw(terminal.stdout ?? process.stdout)
 
