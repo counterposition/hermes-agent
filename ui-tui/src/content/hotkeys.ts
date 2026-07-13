@@ -24,7 +24,7 @@ export function hotkeys(): [string, string][] {
     ...copyHotkeys,
     [action + '+D', h.exit],
     [action + '+G / Alt+G', h.openEditor],
-    [action + '+L', h.redraw],
+    [isMac ? 'Cmd+L / Ctrl+L' : 'Ctrl+L', h.redraw],
     [paste + '+V / /paste', h.paste],
     ['Esc Esc', h.discardDraft],
     ['Tab', h.applyCompletion],
