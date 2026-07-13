@@ -2022,9 +2022,24 @@ def _iteration_summary_chat_kwargs(agent, api_messages: list) -> dict:
     is_lmstudio = provider_name == "lmstudio" and agent._supports_reasoning_extra_body()
     lm_reasoning_effort = agent._resolve_lmstudio_summary_reasoning_effort() if is_lmstudio else None
 
+    provider_profile = None
+    with contextlib.suppress(Exception):
+        from providers import get_provider_profile
+        provider_profile = get_provider_profile(agent.provider)
     extra_body = {}
+    profile_top_level = {}
     if not is_lmstudio and agent._supports_reasoning_extra_body():
-        extra_body["reasoning"] = agent.reasoning_config if agent.reasoning_config is not None else {"enabled": True, "effort": "medium"}
+        if provider_profile is not None:
+            from agent.transports.chat_completions import _reasoning_config_for_model
+            with contextlib.suppress(Exception):
+                profile_reasoning_body, profile_top_level = provider_profile.build_api_kwargs_extras(
+                    reasoning_config=_reasoning_config_for_model(agent.model, agent.reasoning_config),
+                    supports_reasoning=True, model=agent.model, base_url=agent.base_url,
+                    session_id=getattr(agent, "session_id", None),
+                )
+                extra_body.update(profile_reasoning_body)
+        else:
+            extra_body["reasoning"] = agent.reasoning_config if agent.reasoning_config is not None else {"enabled": True, "effort": "medium"}
     if "nousresearch" in agent._base_url_lower:
         from agent.portal_tags import nous_portal_tags
         extra_body["tags"] = nous_portal_tags()
@@ -2036,13 +2051,12 @@ def _iteration_summary_chat_kwargs(agent, api_messages: list) -> dict:
         summary_kwargs.update(agent._max_tokens_param(agent.max_tokens))
     if lm_reasoning_effort is not None:
         summary_kwargs["reasoning_effort"] = lm_reasoning_effort
+    summary_kwargs.update(profile_top_level)
 
     # Merge the profile's canonical body even when routing is unset (e.g. required Portal tags).
     provider_preferences = _provider_preferences_for_agent(agent)
     profile_extra_body = {}
     with contextlib.suppress(Exception):
-        from providers import get_provider_profile
-        provider_profile = get_provider_profile(agent.provider)
         if provider_profile is not None:
             profile_extra_body = provider_profile.build_extra_body(
                 session_id=getattr(agent, "session_id", None), provider_preferences=provider_preferences or None,
