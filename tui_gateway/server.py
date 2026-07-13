@@ -3981,17 +3981,15 @@ def _session_info(agent, session: dict | None = None) -> dict:
     )
     cfg_personality = ((_load_cfg().get("display") or {}).get("personality") or "")
     personality = (session or {}).get("personality", cfg_personality)
-    reasoning_config = getattr(agent, "reasoning_config", None)
-    reasoning_effort = ""
-    if isinstance(reasoning_config, dict):
-        if reasoning_config.get("enabled") is False:
-            # Disabled must be distinguishable from unset ("" = provider
-            # default). Reporting "" here made the desktop adopt the empty
-            # value after the first turn, wiping its sticky "thinking off"
-            # pick and re-creating every later chat at the default effort.
-            reasoning_effort = "none"
-        else:
-            reasoning_effort = str(reasoning_config.get("effort", "") or "")
+    # Canonical label shared with the classic CLI status bar: "" for unset
+    # (provider default), "none" for disabled. Disabled must stay
+    # distinguishable from unset — reporting "" for disabled made the
+    # desktop adopt the empty value after the first turn, wiping its sticky
+    # "thinking off" pick and re-creating every later chat at the default
+    # effort.
+    from hermes_constants import reasoning_effort_label
+
+    reasoning_effort = reasoning_effort_label(getattr(agent, "reasoning_config", None))
     service_tier = getattr(agent, "service_tier", None) or mirror.get("service_tier") or ""
     # Effective approval-bypass state — the same three sources that
     # check_all_command_guards() ORs together: persistent config
@@ -6039,6 +6037,8 @@ def _queued_prompt_snapshot(session: dict) -> dict | None:
 
 @method("session.create")
 def _(rid, params: dict) -> dict:
+    from hermes_constants import reasoning_effort_label
+
     sid = uuid.uuid4().hex[:8]
     key = _new_session_key()
     cols = int(params.get("cols", 80))
@@ -6175,6 +6175,13 @@ def _(rid, params: dict) -> dict:
                     {"provider": session_model_override["provider"]}
                     if session_model_override and session_model_override.get("provider")
                     else {}
+                ),
+                # Same sticky-pick rule for reasoning effort: prefer the
+                # per-session override, fall back to the config default the
+                # deferred build will use — matching what its session.info
+                # reports moments later.
+                "reasoning_effort": reasoning_effort_label(
+                    create_reasoning_override or _load_reasoning_config()
                 ),
                 "tools": {},
                 "skills": {},
@@ -6321,14 +6328,28 @@ def _(rid, params: dict) -> dict:
         return _ok(rid, {"verification": {"status": "unknown", "evidence": None}})
 
 
-def _lazy_resume_info(cwd: str, *, model: str = "", provider: str = "") -> dict:
+def _lazy_resume_info(
+    cwd: str,
+    *,
+    model: str = "",
+    provider: str = "",
+    reasoning_config: dict | None = None,
+) -> dict:
     """session.info for a not-yet-built session (the shape session.create
     returns). tools/skills land later when the deferred build emits session.info."""
+    from hermes_constants import reasoning_effort_label
+
     info = {
         "cwd": cwd,
         "branch": _git_branch_for_cwd(cwd),
         "project": _project_info_for_cwd(cwd),
         "model": model or _resolve_model(),
+        # Stored session effort when the resume carries one, else the config
+        # default the deferred build will use — so the first render matches
+        # the session.info the build emits, instead of flashing blank/stale.
+        "reasoning_effort": reasoning_effort_label(
+            reasoning_config or _load_reasoning_config()
+        ),
         "tools": {},
         "skills": {},
         "lazy": True,
@@ -6672,6 +6693,7 @@ def _(rid, params: dict) -> dict:
                     cwd,
                     model=model_override.get("model") or "",
                     provider=overrides.get("provider_override") or "",
+                    reasoning_config=overrides.get("reasoning_config_override"),
                 ),
                 "inflight": None,
                 "running": False,
