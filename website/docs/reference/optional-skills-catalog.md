@@ -245,6 +245,7 @@ hermes skills uninstall <skill-name>
 | [**rss-feeds**](../user-guide/skills/optional/research/research-rss-feeds.md) | Read RSS, Atom, JSON feeds; discover feeds behind a page. |
 | [**scrapling**](../user-guide/skills/optional/research/research-scrapling.md) | Scrape sites with stealth browsing and Cloudflare bypass. |
 | [**searxng-search**](../user-guide/skills/optional/research/research-searxng-search.md) | Free keyless meta-search aggregating 70+ engines. |
+| [**tutor**](../user-guide/skills/optional/research/research-tutor.md) | Teach concepts via diagnosis, practice, and spaced review. |
 
 ## security
 
