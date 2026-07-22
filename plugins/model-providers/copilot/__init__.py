@@ -28,6 +28,8 @@ class CopilotProfile(ProviderProfile):
                 return {}, {}
             if not reasoning_config:
                 return {"reasoning": {"effort": "medium"}}, {}
+            if reasoning_config.get("enabled") is False:
+                return {}, {}
             # Never drop straight to medium, which inverted the ladder (ultra < high). See #74295.
             effort = clamp_github_reasoning_effort(reasoning_config.get("effort"), supported)
             return {"reasoning": {"effort": effort}}, {}
