@@ -8,12 +8,15 @@ from hermes_cli.memory_setup import _CANCELLED, _curses_select
 def test_curses_select_cancel_defaults_to_selected(monkeypatch):
     captured = {}
 
-    def fake_radiolist(title, items, selected=0, *, cancel_returns=None):
+    def fake_radiolist(
+        title, items, selected=0, *, cancel_returns=None, searchable=False
+    ):
         captured.update({
             "title": title,
             "items": items,
             "selected": selected,
             "cancel_returns": cancel_returns,
+            "searchable": searchable,
         })
         return cancel_returns
 
@@ -27,14 +30,18 @@ def test_curses_select_cancel_defaults_to_selected(monkeypatch):
         "items": ["first - desc", "second"],
         "selected": 1,
         "cancel_returns": 1,
+        "searchable": True,
     }
 
 
 def test_curses_select_accepts_explicit_cancel_value(monkeypatch):
     captured = {}
 
-    def fake_radiolist(title, items, selected=0, *, cancel_returns=None):
+    def fake_radiolist(
+        title, items, selected=0, *, cancel_returns=None, searchable=False
+    ):
         captured["cancel_returns"] = cancel_returns
+        captured["searchable"] = searchable
         return cancel_returns
 
     monkeypatch.setattr("hermes_cli.curses_ui.curses_radiolist", fake_radiolist)
@@ -43,12 +50,16 @@ def test_curses_select_accepts_explicit_cancel_value(monkeypatch):
 
     assert result == _CANCELLED
     assert captured["cancel_returns"] == _CANCELLED
+    assert captured["searchable"] is True
 
 
 def test_curses_select_clears_after_picker_returns(monkeypatch):
     events = []
 
-    def fake_radiolist(title, items, selected=0, *, cancel_returns=None):
+    def fake_radiolist(
+        title, items, selected=0, *, cancel_returns=None, searchable=False
+    ):
+        assert searchable is True
         events.append("picker")
         return selected
 
