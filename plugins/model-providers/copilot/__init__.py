@@ -34,6 +34,8 @@ class CopilotProfile(ProviderProfile):
 
                 supported_efforts = github_model_reasoning_efforts(model)
                 if supported_efforts and reasoning_config:
+                    if reasoning_config.get("enabled") is False:
+                        return {}, {}
                     effort = reasoning_config.get("effort", "medium")
                     # Honor the requested level when the live Copilot catalog
                     # lists it as supported: gpt-5.5/gpt-5.4 DO support
