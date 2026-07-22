@@ -568,6 +568,7 @@ const sidebars: SidebarsConfig = {
                     'user-guide/skills/optional/research/research-research-paper-writing',
                     'user-guide/skills/optional/research/research-rss-feeds',
                     'user-guide/skills/optional/research/research-scrapling',
+                    'user-guide/skills/optional/research/research-tutor',
                   ],
                 },
                 {
