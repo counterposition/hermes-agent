@@ -28,6 +28,8 @@ class CopilotProfile(ProviderProfile):
                 return {}, {}
             if not reasoning_config:
                 return {"reasoning": {"effort": "medium"}}, {}
+            if reasoning_config.get("enabled") is False:
+                return {}, {}
             effort = reasoning_config.get("effort", "medium")
             # Honor a level the live catalog lists; otherwise clamp to the nearest WEAKER
             # supported level (never drop straight to medium, which inverted the ladder:
