@@ -1,0 +1,4 @@
+# Vendored py-fsrs is kept byte-identical to its upstream tag (see README.md), so the
+# repo-wide lint rules do not apply here.
+[lint]
+select = []
