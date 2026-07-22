@@ -12,6 +12,12 @@
 ### What's different in this fork
 
 - **Official Obsidian skills, adopted additively** — Ships Hermes-integrated versions of the upstream Obsidian skills (`obsidian-markdown`, `obsidian-cli`, `obsidian-bases`, `json-canvas`) alongside the existing bundled `obsidian` skill. The broad `obsidian` skill remains the generic entry point and routes to the focused skills for format-specific or app-specific tasks.
+- **Reasoning controls that stay visible and wire-safe** — Shows explicit effort in the classic status bar, keeps provider-specific max/ultra mappings valid, and uses provider profiles for iteration-limit summaries.
+- **Readline-style TUI editing** — Adds safe Ctrl+B/F/D navigation and deletion while keeping macOS action shortcuts and exit arbitration unambiguous.
+- **Cerebras inference provider** — Adds GPT-OSS and Qwen catalog entries, provider-specific reasoning controls, replay sanitization, and preserved-thinking support.
+- **Searchable configuration menus and OpenRouter URL propagation** — Extends upstream fuzzy search to long single-select setup menus and preserves the configured OpenRouter URL in auxiliary clients and credential pools.
+- **Optional FSRS-backed tutor** — Adds concept tutoring and deterministic, profile-scoped spaced review through the `tutor` skill.
+- **Tinfoil provider profile** — Defaults to a local verification proxy and translates per-model reasoning settings.
 
 ---
 
