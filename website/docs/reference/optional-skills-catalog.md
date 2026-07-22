@@ -229,6 +229,7 @@ hermes skills uninstall <skill-name>
 | [**research-paper-writing**](../user-guide/skills/optional/research/research-research-paper-writing.md) | Write ML papers for NeurIPS/ICML/ICLR: design→submit. |
 | [**rss-feeds**](../user-guide/skills/optional/research/research-rss-feeds.md) | Read RSS, Atom, JSON feeds; discover feeds behind a page. |
 | [**scrapling**](../user-guide/skills/optional/research/research-scrapling.md) | Scrape sites with stealth browsing and Cloudflare bypass. |
+| [**tutor**](../user-guide/skills/optional/research/research-tutor.md) | Teach concepts via diagnosis, practice, and spaced review. |
 
 ## security
 
