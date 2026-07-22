@@ -42,6 +42,16 @@ def _patch_efforts(monkeypatch, efforts):
 
 
 class TestCopilotReasoningEffortClamp:
+    def test_disabled_reasoning_emits_no_effort(self, copilot_profile, monkeypatch):
+        _patch_efforts(monkeypatch, ["low", "medium", "high"])
+        extra_body, top_level = copilot_profile.build_api_kwargs_extras(
+            model="o-series-model",
+            reasoning_config={"enabled": False},
+            supports_reasoning=True,
+        )
+        assert extra_body == {}
+        assert top_level == {}
+
     def test_supported_effort_forwarded_verbatim(self, copilot_profile, monkeypatch):
         """xhigh is forwarded unchanged when the catalog lists it."""
         _patch_efforts(monkeypatch, ["minimal", "low", "medium", "high", "xhigh"])
