@@ -11,7 +11,15 @@ import type {
   SudoRespondResponse,
   VoiceRecordResponse
 } from '../gatewayTypes.js'
-import { type ChordKey, isAction, isBareCtrl, isCopyShortcut, isExplicitAction, isMac, isVoiceToggleKey } from '../lib/platform.js'
+import {
+  type ChordKey,
+  isAction,
+  isBareCtrl,
+  isCopyShortcut,
+  isExplicitAction,
+  isMac,
+  isVoiceToggleKey
+} from '../lib/platform.js'
 import { computePrecisionWheelStep, initPrecisionWheel } from '../lib/precisionWheel.js'
 import { computeWheelStep, initWheelAccelForHost } from '../lib/wheelAccel.js'
 import { closeWidget, dispatchWidgetInput } from '../sdk/host.js'
