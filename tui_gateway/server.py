@@ -960,12 +960,12 @@ def _await_resume_history(sid: str, current: dict) -> bool:
         return _sessions.get(sid) is current
 
 
-def _attach_built_agent(current: dict, agent) -> None:
+def _attach_built_agent(current: dict, agent, built_kw: dict | None = None) -> None:
     """Attach a freshly built agent to its live record (session DB row deferred to first run_conversation())."""
     # Bot Mode gate hint: the DB title lands post-first-turn but the system prompt builds at turn START.
     if _title_hint := str(current.get("pending_title") or "").strip():
         agent._session_title_hint = _title_hint
-    current["agent"] = agent
+    _install_agent_reconciled(current, agent, built_kw or {})
     _session_todo_state(current)
     # Baseline for the per-turn config sync (profile home override still active).
     current["config_model_seen"] = _config_model_target()
@@ -1047,10 +1047,11 @@ def _start_agent_build(sid: str, session: dict) -> None:
             except Exception:
                 logger.warning("MCP discovery startup failed", exc_info=True)
             try:
-                agent = _make_agent(sid, key, **_deferred_build_agent_kwargs(current, session_db))
+                built_kw = _deferred_build_agent_kwargs(current, session_db)
+                agent = _make_agent(sid, key, **built_kw)
             finally:
                 _clear_session_context(tokens)
-            _attach_built_agent(current, agent)
+            _attach_built_agent(current, agent, built_kw)
             # No eager slash-worker pre-warm (slash.exec spawns on demand): each worker forks the full stdio
             # MCP fleet, and live-transport sessions are never reaped, so fleets would accumulate.
             notify_registered = _wire_session_agent(sid, key, agent)
