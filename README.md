@@ -9,6 +9,8 @@
 
 > **This is a maintained fork of [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent).** It carries fixes and enhancements that are unlikely to be reviewed upstream due to the volume of open PRs. Contributions are always welcome.
 
+The fork's review-gated upstream rebase process is documented in [Fork maintenance](docs/fork-maintenance.md).
+
 ### What's different in this fork
 
 - **Official Obsidian skills, adopted additively** — Ships Hermes-integrated versions of the upstream Obsidian skills (`obsidian-markdown`, `obsidian-cli`, `obsidian-bases`, `json-canvas`) alongside the existing bundled `obsidian` skill. The broad `obsidian` skill remains the generic entry point and routes to the focused skills for format-specific or app-specific tasks.
