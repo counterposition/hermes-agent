@@ -6,7 +6,15 @@ import { DASHBOARD_TUI_MODE } from '../config/env.js'
 import { DOUBLE_ESC_MS, TYPING_IDLE_MS } from '../config/timing.js'
 import { applyCompletion } from '../domain/slash.js'
 import type { ConfigSetResponse, VoiceRecordResponse } from '../gatewayTypes.js'
-import { type ChordKey, isAction, isBareCtrl, isCopyShortcut, isExplicitAction, isMac, isVoiceToggleKey } from '../lib/platform.js'
+import {
+  type ChordKey,
+  isAction,
+  isBareCtrl,
+  isCopyShortcut,
+  isExplicitAction,
+  isMac,
+  isVoiceToggleKey
+} from '../lib/platform.js'
 import { computePrecisionWheelStep, initPrecisionWheel } from '../lib/precisionWheel.js'
 import { computeWheelStep, initWheelAccelForHost } from '../lib/wheelAccel.js'
 import { closeWidget, dispatchWidgetInput } from '../sdk/host.js'
