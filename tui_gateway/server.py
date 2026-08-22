@@ -1084,10 +1084,11 @@ def _await_resume_history(sid: str, current: dict) -> bool:
         return _sessions.get(sid) is current
 
 
-def _attach_built_agent(sid: str, current: dict, agent) -> bool:
+def _attach_built_agent(sid: str, current: dict, agent, built_kw: dict | None = None) -> bool:
     """Attach a freshly built agent to its live record (session DB row deferred to first run_conversation()).
     False when ``session.close`` popped this record mid-build: teardown saw ``agent=None`` and closed
-    nothing, so the caller owns closing the orphan (#49852)."""
+    nothing, so the caller owns closing the orphan (#49852). Overrides that a ``config.set`` landed
+    while the build ran are adopted on install (``_install_agent_reconciled``)."""
     # Bot Mode gate hint: the DB title lands post-first-turn but the system prompt builds at turn START.
     if _title_hint := str(current.get("pending_title") or "").strip():
         agent._session_title_hint = _title_hint
@@ -1095,7 +1096,7 @@ def _attach_built_agent(sid: str, current: dict, agent) -> bool:
     with _sessions_lock:
         if _sessions.get(sid) is not current:
             return False
-        current["agent"] = agent
+        _install_agent_reconciled(current, agent, built_kw or {})
     # A workspace move can land while construction is still in flight.
     _register_session_cwd(current)
     _session_todo_state(current)
@@ -1187,14 +1188,15 @@ def _start_agent_build(sid: str, session: dict) -> None:
             except Exception:
                 logger.warning("MCP discovery startup failed", exc_info=True)
             try:
-                agent = _make_agent(sid, key, **_deferred_build_agent_kwargs(current, session_db))
+                built_kw = _deferred_build_agent_kwargs(current, session_db)
+                agent = _make_agent(sid, key, **built_kw)
             finally:
                 _clear_session_context(tokens)
             # Attach atomically against session teardown: ``session.close`` may have popped this
             # session while the expensive build was in flight, in which case teardown could not close
             # an agent that did not exist yet. Release the orphan immediately and do not keep wiring
             # workers/callbacks for a dead session (#49852).
-            if not _attach_built_agent(sid, current, agent):
+            if not _attach_built_agent(sid, current, agent, built_kw):
                 # Same contract as the replaced-before-attach exit above: a turn admitted against
                 # this record must refuse with the real reason rather than a generic missing agent.
                 current["agent_error"] = AGENT_BUILD_ABANDONED

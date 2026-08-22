@@ -533,6 +533,62 @@ def _restart_status_factory(parent: str, progress):
     return _restart_status
 
 
+def _install_agent_reconciled(session: dict, agent, built_kw: dict) -> None:
+    """Install a freshly built agent, adopting config.set values that raced the build.
+
+    ``_make_agent`` can block for seconds (MCP discovery, prompt/skill build).
+    A ``config.set`` reasoning/model change landing in that window only
+    updates the session dict — ``session["agent"]`` is still None (or the
+    about-to-be-discarded old agent on the /new path), so the live-apply
+    branch is skipped — and installing the built agent as-is would publish
+    the values snapshotted at build start, silently dropping the user's pick
+    for the life of the session. Compare the dict's current overrides against
+    what the build actually used (``built_kw``) and apply any drift to the
+    agent before publishing it, exactly as the live config.set path would
+    have. Both call sites emit ``session.info`` from the installed agent
+    right after, so the reconciled values reach the client.
+
+    Runs atomically with config.set's write-then-check under the session's
+    ``agent_config_lock``, so a concurrent mutation either observes the
+    installed agent (live-apply path) or is adopted here — never dropped.
+    """
+    lock = session.setdefault("agent_config_lock", threading.Lock())
+    with lock:
+        reasoning = session.get("create_reasoning_override")
+        if reasoning is not None and reasoning != built_kw.get(
+            "reasoning_config_override"
+        ):
+            agent.reasoning_config = reasoning
+        tier = session.get("create_service_tier_override")
+        if tier is not None and tier != built_kw.get("service_tier_override"):
+            agent.service_tier = tier
+        override = session.get("model_override")
+        if (
+            isinstance(override, dict)
+            and override.get("model")
+            and override != built_kw.get("model_override")
+        ):
+            # Same in-place swap the live /model path performs
+            # (_apply_model_switch). switch_model rolls back atomically on
+            # failure, so a failed reconcile keeps the built model — matching
+            # the live path's failed-switch-is-a-no-op contract.
+            try:
+                agent.switch_model(
+                    new_model=str(override.get("model") or ""),
+                    new_provider=override.get("provider") or "",
+                    api_key=override.get("api_key") or "",
+                    base_url=override.get("base_url") or "",
+                    api_mode=override.get("api_mode") or "",
+                )
+            except Exception:
+                logger.warning(
+                    "mid-build model switch reconcile failed; keeping %s",
+                    getattr(agent, "model", ""),
+                    exc_info=True,
+                )
+        session["agent"] = agent
+
+
 def _rebuild_session_agent(sid: str, session: dict, **kwargs):
     """Prepare and install a replacement on the session's profile, then transfer DB ownership.
 
@@ -561,6 +617,24 @@ def _rebuild_session_agent(sid: str, session: dict, **kwargs):
             if kwarg not in kwargs and session.get(pin) is not None:
                 kwargs[kwarg] = session[pin]
         agent = _make_agent(sid, session["session_key"], session_db=session_db, **kwargs)
+        # Reconcile while the profile scopes are active, and publish alongside
+        # the DB ownership transfer so session teardown cannot observe half of
+        # the replacement transaction. Only a DEDICATED handle carries ownership;
+        # the shared launch handle outlives every agent and _transfer_db_to_agent refuses it.
+        with _sessions_lock:
+            # session.close claimed this record (``_pop_session_by_id``) while _make_agent ran: its
+            # teardown already closed the agent it saw, so one installed now is never closed (#49852).
+            closed_midbuild = bool(session.get("_closing"))
+            if not closed_midbuild:
+                _install_agent_reconciled(session, agent, kwargs)
+                session["config_model_seen"] = config_model_seen
+                owned = opened or bool(getattr(old_agent, "_owns_session_db", False))
+                if owned and _transfer_db_to_agent(agent, session_db):
+                    if old_agent is not None:
+                        old_agent._owns_session_db = False
+                elif opened:
+                    with contextlib.suppress(Exception):
+                        session_db.close()
     except BaseException:
         if opened and session_db is not None:
             with contextlib.suppress(Exception):
@@ -569,21 +643,6 @@ def _rebuild_session_agent(sid: str, session: dict, **kwargs):
     finally:
         if scopes is not None:
             _release_build_profile_scopes(scopes)
-    # Only a DEDICATED handle carries ownership; the shared launch handle outlives every agent and
-    # _transfer_db_to_agent refuses it.
-    with _sessions_lock:
-        # session.close claimed this record (``_pop_session_by_id``) while _make_agent ran: its teardown
-        # already closed the agent it saw, so one installed now is never closed (#49852).
-        closed_midbuild = bool(session.get("_closing"))
-        if not closed_midbuild:
-            session.update(agent=agent, config_model_seen=config_model_seen)
-            owned = opened or bool(getattr(old_agent, "_owns_session_db", False))
-            if owned and _transfer_db_to_agent(agent, session_db):
-                if old_agent is not None:
-                    old_agent._owns_session_db = False
-            elif opened:
-                with contextlib.suppress(Exception):
-                    session_db.close()
     if closed_midbuild:
         with contextlib.suppress(Exception), _session_profile_runtime_scope(session):
             if hasattr(agent, "close"):
