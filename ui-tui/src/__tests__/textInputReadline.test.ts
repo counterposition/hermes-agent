@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { applyReadlineCtrlEdit } from '../components/textInput.js'
 
-const key = (overrides: Record<string, unknown> = {}) =>
-  ({ ctrl: false, meta: false, ...overrides }) as any
+const key = (overrides: Record<string, unknown> = {}) => ({ ctrl: false, meta: false, ...overrides }) as any
 
 const ctrl = key({ ctrl: true })
 
@@ -85,12 +84,15 @@ describe('applyReadlineCtrlEdit', () => {
   })
 
   it('ignores modified and unrelated keys', () => {
-    expect(applyReadlineCtrlEdit('f', key({ ctrl: true, shift: true }), { cursor: 0, selection: null, value: 'abc' }))
-      .toBeNull()
-    expect(applyReadlineCtrlEdit('d', key({ ctrl: true, alt: true }), { cursor: 0, selection: null, value: 'abc' }))
-      .toBeNull()
-    expect(applyReadlineCtrlEdit('d', key({ ctrl: true, super: true }), { cursor: 0, selection: null, value: 'abc' }))
-      .toBeNull()
+    expect(
+      applyReadlineCtrlEdit('f', key({ ctrl: true, shift: true }), { cursor: 0, selection: null, value: 'abc' })
+    ).toBeNull()
+    expect(
+      applyReadlineCtrlEdit('d', key({ ctrl: true, alt: true }), { cursor: 0, selection: null, value: 'abc' })
+    ).toBeNull()
+    expect(
+      applyReadlineCtrlEdit('d', key({ ctrl: true, super: true }), { cursor: 0, selection: null, value: 'abc' })
+    ).toBeNull()
     expect(applyReadlineCtrlEdit('x', ctrl, { cursor: 0, selection: null, value: 'abc' })).toBeNull()
   })
 })
