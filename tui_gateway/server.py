@@ -3398,6 +3398,62 @@ def _wait_agent_for_prompt(session: dict, rid: str, sid: str) -> dict | None:
     return _err(rid, 5032, err) if err else None
 
 
+def _install_agent_reconciled(session: dict, agent, built_kw: dict) -> None:
+    """Install a freshly built agent, adopting config.set values that raced the build.
+
+    ``_make_agent`` can block for seconds (MCP discovery, prompt/skill build).
+    A ``config.set`` reasoning/model change landing in that window only
+    updates the session dict — ``session["agent"]`` is still None (or the
+    about-to-be-discarded old agent on the /new path), so the live-apply
+    branch is skipped — and installing the built agent as-is would publish
+    the values snapshotted at build start, silently dropping the user's pick
+    for the life of the session. Compare the dict's current overrides against
+    what the build actually used (``built_kw``) and apply any drift to the
+    agent before publishing it, exactly as the live config.set path would
+    have. Both call sites emit ``session.info`` from the installed agent
+    right after, so the reconciled values reach the client.
+
+    Runs atomically with config.set's write-then-check under the session's
+    ``agent_config_lock``, so a concurrent mutation either observes the
+    installed agent (live-apply path) or is adopted here — never dropped.
+    """
+    lock = session.setdefault("agent_config_lock", threading.Lock())
+    with lock:
+        reasoning = session.get("create_reasoning_override")
+        if reasoning is not None and reasoning != built_kw.get(
+            "reasoning_config_override"
+        ):
+            agent.reasoning_config = reasoning
+        tier = session.get("create_service_tier_override")
+        if tier is not None and tier != built_kw.get("service_tier_override"):
+            agent.service_tier = tier
+        override = session.get("model_override")
+        if (
+            isinstance(override, dict)
+            and override.get("model")
+            and override != built_kw.get("model_override")
+        ):
+            # Same in-place swap the live /model path performs
+            # (_apply_model_switch). switch_model rolls back atomically on
+            # failure, so a failed reconcile keeps the built model — matching
+            # the live path's failed-switch-is-a-no-op contract.
+            try:
+                agent.switch_model(
+                    new_model=str(override.get("model") or ""),
+                    new_provider=override.get("provider") or "",
+                    api_key=override.get("api_key") or "",
+                    base_url=override.get("base_url") or "",
+                    api_mode=override.get("api_mode") or "",
+                )
+            except Exception:
+                logger.warning(
+                    "mid-build model switch reconcile failed; keeping %s",
+                    getattr(agent, "model", ""),
+                    exc_info=True,
+                )
+        session["agent"] = agent
+
+
 def _start_agent_build(sid: str, session: dict) -> None:
     """Start building the real AIAgent for a TUI session, once.
 
@@ -3550,7 +3606,7 @@ def _start_agent_build(sid: str, session: dict) -> None:
 
             # Session DB row deferred to first run_conversation() call.
             # pending_title applied post-first-message (see cli.exec handler).
-            current["agent"] = agent
+            _install_agent_reconciled(current, agent, kw)
             _session_todo_state(current)
             # Baseline for the per-turn config sync; the profile home
             # override is still active here.
@@ -9010,18 +9066,24 @@ def _reset_session_agent(sid: str, session: dict) -> dict:
         session.pop("create_reasoning_override", None)
         session.pop("create_service_tier_override", None)
         session.pop("one_turn_model_restore", None)
+        # The rebuild intentionally starts without session overrides. Keep the
+        # exact build inputs so _install_agent_reconciled can still adopt a
+        # fresh config.set that lands while _make_agent is running.
+        built_kw: dict = {
+            "context_cwd_is_launch_artifact": (
+                _context_cwd_is_launch_artifact(session)
+            ),
+        }
         new_agent = _make_agent(
             sid,
             session["session_key"],
             session_id=session["session_key"],
             platform_override=_session_source(session),
-            context_cwd_is_launch_artifact=(
-                _context_cwd_is_launch_artifact(session)
-            ),
+            **built_kw,
         )
     finally:
         _clear_session_context(tokens)
-    session["agent"] = new_agent
+    _install_agent_reconciled(session, new_agent, built_kw)
     session["config_model_seen"] = _config_model_target()
     session["attached_images"] = []
     session["queued_prompt"] = None
@@ -15127,24 +15189,37 @@ def _(rid, params: dict) -> dict:
             parsed = parse_reasoning_effort(arg)
             if parsed is None:
                 return _err(rid, 4002, f"unknown reasoning value: {value}")
+            agent = None
             if global_scope or session is None:
                 _write_config_key("agent.reasoning_effort", arg)
                 if session is not None:
-                    session.pop("create_reasoning_override", None)
+                    lock = session.setdefault("agent_config_lock", threading.Lock())
+                    with lock:
+                        session.pop("create_reasoning_override", None)
+                        agent = session.get("agent")
             else:
                 # Session-scoped, like the messaging gateway's `/reasoning
                 # <level>` (global persistence is `--global` / Settings →
                 # Model territory). Writing config.yaml here let every
                 # desktop model-menu selection rewrite the user's global
                 # agent.reasoning_effort to the preset default.
-                session["create_reasoning_override"] = parsed
-            if session and session.get("agent") is not None:
-                session["agent"].reasoning_config = parsed
+                #
+                # Write-then-check must be atomic with the deferred build's
+                # reconcile-then-install (_install_agent_reconciled): without
+                # the lock, a value landing between the build's reconcile
+                # read and its agent install is silently lost — the built
+                # agent keeps the effort snapshotted at build start.
+                lock = session.setdefault("agent_config_lock", threading.Lock())
+                with lock:
+                    session["create_reasoning_override"] = parsed
+                    agent = session.get("agent")
+            if agent is not None:
+                agent.reasoning_config = parsed
                 _persist_live_session_runtime(session)
                 _emit(
                     "session.info",
                     params.get("session_id", ""),
-                    _session_info(session["agent"], session),
+                    _session_info(agent, session),
                 )
             return _ok(rid, {"key": key, "value": arg})
         except Exception as e:
