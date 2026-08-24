@@ -1,5 +1,7 @@
 # Architecture Decision Records
 
+> Fork-local ADRs live in [docs/adr/](adr/README.md), one file per decision.
+
 ## 2026-07-13: Scope plugin manager state by Hermes home/profile (keyed cache)
 
 Status: Accepted
