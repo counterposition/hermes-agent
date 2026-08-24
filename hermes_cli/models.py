@@ -591,7 +591,13 @@ def get_default_model_for_provider(provider: str) -> str:
         # fetched live; its curated snapshot carries the default).
         if preferred and (preferred in models or not models):
             return preferred
-    return models[0] if models else ""
+    if models:
+        return models[0]
+    # A profile without ``static_models`` stays out of model-name auto-detection on purpose; its
+    # curated fallback still supplies the non-interactive default.
+    from providers import get_provider_profile
+    profile = get_provider_profile(provider) if provider else None
+    return profile.fallback_models[0] if profile is not None and profile.fallback_models else ""
 
 
 def _openrouter_model_is_free(pricing: Any) -> bool:
