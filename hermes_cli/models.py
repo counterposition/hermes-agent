@@ -1567,7 +1567,21 @@ def get_default_model_for_provider(provider: str) -> str:
         # snapshot carries the default).
         if preferred and (preferred in models or not models):
             return preferred
-    return models[0] if models else ""
+    if models:
+        return models[0]
+
+    # Provider plugins intentionally avoid duplicating their curated fallback
+    # models in this core module. Use the profile's first fallback for the same
+    # non-interactive default contract when no static catalog entry exists.
+    try:
+        from providers import get_provider_profile
+
+        profile = get_provider_profile(provider)
+        if profile and profile.fallback_models:
+            return profile.fallback_models[0]
+    except Exception:
+        pass
+    return ""
 
 
 def _openrouter_model_is_free(pricing: Any) -> bool:
