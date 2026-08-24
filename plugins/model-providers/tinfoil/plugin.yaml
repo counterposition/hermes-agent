@@ -1,0 +1,5 @@
+name: tinfoil-provider
+kind: model-provider
+version: 1.0.0
+description: Tinfoil confidential inference (via local tinfoil-proxy)
+author: Harish Kukreja
