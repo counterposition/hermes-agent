@@ -126,3 +126,42 @@ def test_limit_hit_keeps_drained_matches_when_group_kill_is_refused(tree, ops_fa
     monkeypatch.setattr(os, "killpg", lambda pgid, sig: (_ for _ in ()).throw(PermissionError(1, "Operation not permitted")))
     result = ops.search(pattern="needle", path=str(tree), limit=2)
     assert not result.error and len(result.matches) == 2, result.to_dict()
+
+
+@pytest.mark.parametrize("error", [ProcessLookupError, PermissionError])
+def test_native_runner_preserves_output_when_process_exits_before_signal(
+    tree, ops_factory, monkeypatch, error
+):
+    def exited_before_signal(proc):
+        assert proc.wait(timeout=5) == 0
+        raise error("process exited before signal")
+
+    monkeypatch.setattr("tools.environments.local._kill_process_group_posix", exited_before_signal)
+    result = ops_factory(tree, [])._run_rg_native(
+        ["sh", "-c", "'echo needle; sleep 0.2'"], 1, timeout=5
+    )
+    assert result.exit_code == 0
+    assert result.stdout == "needle\n"
+
+
+def test_native_runner_does_not_hide_signal_denial_for_live_process(tree, ops_factory, monkeypatch):
+    from tools.environments.local import _kill_process_group_posix
+
+    children = []
+
+    def denied(proc):
+        children.append(proc)
+        assert proc.poll() is None
+        raise PermissionError("live process signal denied")
+
+    monkeypatch.setattr("tools.environments.local._kill_process_group_posix", denied)
+    try:
+        with pytest.raises(PermissionError, match="live process signal denied"):
+            ops_factory(tree, [])._run_rg_native(
+                ["sh", "-c", "'echo needle; sleep 30'"], 1, timeout=5
+            )
+    finally:
+        for proc in children:
+            _kill_process_group_posix(proc)
+            proc.wait(timeout=5)
+            proc.stdout.close()
