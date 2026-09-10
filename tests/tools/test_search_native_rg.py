@@ -126,3 +126,16 @@ def test_limit_hit_keeps_drained_matches_when_group_kill_is_refused(tree, ops_fa
     monkeypatch.setattr(os, "killpg", lambda pgid, sig: (_ for _ in ()).throw(PermissionError(1, "Operation not permitted")))
     result = ops.search(pattern="needle", path=str(tree), limit=2)
     assert not result.error and len(result.matches) == 2, result.to_dict()
+
+
+
+def test_limit_hit_keeps_drained_matches_when_leader_exits_before_getpgid(tree, ops_factory, monkeypatch):
+    """rg can exit between the caller's poll() and the kill helper's ``getpgid``; macOS then
+    answers ESRCH for the zombie leader. The drained matches must survive as a normal result."""
+    import os
+
+    monkeypatch.setenv("HERMES_NATIVE_FILE_READ", "1")
+    ops = ops_factory(tree, [])
+    monkeypatch.setattr(os, "getpgid", lambda pid: (_ for _ in ()).throw(ProcessLookupError(3, "No such process")))
+    result = ops.search(pattern="needle", path=str(tree), limit=2)
+    assert not result.error and len(result.matches) == 2, result.to_dict()
