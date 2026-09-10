@@ -140,3 +140,15 @@ def test_local_search_runs_the_pinned_ripgrep_not_the_first_on_path(_local_env, 
                         lambda name: InstalledPackage(pinned.parent, "15", pinned) if name == "ripgrep" else None)
     ops = ShellFileOperations(_local_env, cwd=str(tmp_path))
     assert ops._resolve_command("rg") == str(pinned).replace("\\", "/")
+
+
+def test_limit_hit_keeps_drained_matches_when_leader_exits_before_getpgid(tree, ops_factory, monkeypatch):
+    """rg can exit between the caller's poll() and the kill helper's ``getpgid``; macOS then
+    answers ESRCH for the zombie leader. The drained matches must survive as a normal result."""
+    import os
+
+    monkeypatch.setenv("HERMES_NATIVE_FILE_READ", "1")
+    ops = ops_factory(tree, [])
+    monkeypatch.setattr(os, "getpgid", lambda pid: (_ for _ in ()).throw(ProcessLookupError(3, "No such process")))
+    result = ops.search(pattern="needle", path=str(tree), limit=2)
+    assert not result.error and len(result.matches) == 2, result.to_dict()
