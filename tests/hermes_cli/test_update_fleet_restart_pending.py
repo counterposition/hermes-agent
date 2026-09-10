@@ -349,6 +349,11 @@ def test_run_pending_restart_true_when_no_gateways(monkeypatch, capsys):
     )
     monkeypatch.setattr(hermes_main, "_purge_stale_hermes_modules", lambda: None)
 
+    # This exercises the systemd inventory contract on every host.
+    monkeypatch.setattr("hermes_cli.gateway.is_macos", lambda: False)
+    monkeypatch.setattr("hermes_cli.gateway.is_windows", lambda: False)
+    monkeypatch.setattr("hermes_cli.gateway.supports_systemd_services", lambda: True)
+
     # An empty PID scan is insufficient; both supervisor scopes must answer empty.
     monkeypatch.setattr(update_cmd_fleet, "_systemd_gateway_unit_listings", lambda: [
         (scope, cmd, SimpleNamespace(returncode=0, stdout=""))
