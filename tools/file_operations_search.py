@@ -371,7 +371,14 @@ class SearchMixin:
                 exit_code = 124
                 break
         if proc.poll() is None:
-            _kill_process_group_posix(proc)  # native lane is POSIX-only (gate above)
+            try:
+                _kill_process_group_posix(proc)  # native lane is POSIX-only (gate above)
+            except (ProcessLookupError, PermissionError):
+                # rg can exit between poll and signalling its group. macOS
+                # may report EPERM for that completed group; a live process
+                # still needs the original error surfaced.
+                if proc.poll() is None:
+                    raise
         proc.wait()
         drainer.join()
         proc.stdout.close()
