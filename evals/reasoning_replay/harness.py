@@ -159,7 +159,8 @@ class Client:
                 time.sleep(15)  # live install rotates the key; give it a chance, then re-read
                 key = self._key()
             url = self.base + path
-            headers = {"Content-Type": "application/json"}
+            # Cloudflare-fronted APIs (Cerebras) 403 "error code: 1010" on urllib's default agent.
+            headers = {"Content-Type": "application/json", "User-Agent": "hermes-rr-eval/1.0"}
             if self.kind == "gemini":
                 headers["x-goog-api-key"] = key
             elif key:

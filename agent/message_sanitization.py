@@ -659,8 +659,12 @@ _LOCAL_CARRIERS = frozenset({RC, R})  # llama.cpp/SGLang read reasoning_content,
 
 _REASONING_CARRIER_ROUTES: tuple = (
     # (carriers, providers (lowered), hosts) — evidence per row in the PR body / FINDINGS.
-    (frozenset(), frozenset({"mistral", "groq", "cerebras", "sambanova"}),
-     ("mistral.ai", "groq.com", "cerebras.ai", "sambanova.ai", "hunyuan.cloud.tencent.com")),
+    (frozenset(), frozenset({"mistral", "groq", "sambanova"}),
+     ("mistral.ai", "groq.com", "sambanova.ai", "hunyuan.cloud.tencent.com")),
+    # Cerebras 400s on reasoning_content and reasoning_details ("property ... is unsupported") but
+    # documents ``reasoning`` for history: qwen-3.8-27b consumes it (+440 prompt tokens, canary
+    # recalled, cross-turn); gpt-oss-120b accepts it with a 200 and ignores it.
+    (frozenset({R}), frozenset({"cerebras"}), ("cerebras.ai",)),
     # Fireworks' ChatMessage schema is additionalProperties:false with reasoning_content only.
     (frozenset({RC}), frozenset({"fireworks"}), ("fireworks.ai",)),
     # OpenRouter-format gateways read the unified array, the string and the alias.
